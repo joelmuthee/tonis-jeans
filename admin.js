@@ -148,11 +148,11 @@ function generateDescription(name) {
   ];
   const middles = [
     `Quality reviewed and ready for its next chapter.`,
-    `Hand-picked for ThriftLux. Clean lines and timeless appeal.`,
+    `Hand-picked for Toni's. Clean lines and timeless appeal.`,
     `Pre-loved with care, photographed exactly as it is.`
   ];
   const closers = [
-    `Tap Enquire to chat with Venessa on WhatsApp.`,
+    `Tap Enquire to chat with Toni on WhatsApp.`,
     `Drop-off in Nairobi CBD or arrange delivery.`,
     `One-of-one. Once it's gone, it's gone.`
   ];
