@@ -1,14 +1,14 @@
-/* ThriftLux: black & gold luxury thrift */
+/* Toni's Jeans & Tees: vibrant orange & black */
 :root {
-  --bg: #faf7f2;
+  --bg: #fff8ec;
   --bg-card: #ffffff;
-  --ink: #0d0d0d;
-  --ink-soft: #4a4540;
-  --ink-faint: #8a857f;
-  --gold: #c9a961;
-  --gold-deep: #a88847;
-  --gold-light: #ead7a8;
-  --line: #ece6dc;
+  --ink: #1a1410;
+  --ink-soft: #4a3f35;
+  --ink-faint: #8a7f72;
+  --gold: #f5a623;
+  --gold-deep: #d98f10;
+  --gold-light: #ffd98a;
+  --line: #f3e6cf;
   --shadow: 0 1px 2px rgba(13,13,13,0.04), 0 8px 24px rgba(13,13,13,0.06);
   --shadow-lg: 0 20px 60px rgba(13,13,13,0.12);
   --radius: 14px;
