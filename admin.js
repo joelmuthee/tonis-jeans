@@ -210,6 +210,7 @@ async function saveBag() {
 
     resetForm();
     renderList();
+    renderDashboard();
   } catch(err) {
     showToast('Sync failed: ' + err.message);
     console.error(err);
@@ -260,6 +261,7 @@ async function deleteBag(id) {
   try {
     await apiPublish();
     renderList();
+    renderDashboard();
     showToast('Bag deleted and live.');
   } catch(err) {
     showToast('Sync failed: ' + err.message);
@@ -277,6 +279,7 @@ async function toggleSold(id) {
     try {
       await apiPublish();
       renderList();
+    renderDashboard();
       showToast('Marked as available.');
     } catch(err) {
       bag.sold = true;
@@ -338,6 +341,7 @@ async function commitSold(withBuyer) {
   try {
     await apiPublish();
     renderList();
+    renderDashboard();
     showToast(withBuyer ? 'SOLD. Buyer saved.' : 'Marked as SOLD.');
     if (withBuyer) sendBuyerToGHL(bag);
   } catch(err) {
@@ -387,6 +391,91 @@ document.getElementById('buyerSaveBtn').addEventListener('click', () => commitSo
 document.getElementById('buyerSkipBtn').addEventListener('click', () => commitSold(false));
 document.getElementById('buyerCancelBtn').addEventListener('click', closeBuyerModal);
 buyerModal.addEventListener('click', e => { if (e.target === buyerModal) closeBuyerModal(); });
+
+// ====== DASHBOARD ======
+function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
+function startOfWeek(d) {
+  const x = startOfDay(d);
+  const dow = (x.getDay() + 6) % 7; // Mon = 0
+  x.setDate(x.getDate() - dow);
+  return x;
+}
+function startOfMonth(d) { const x = new Date(d.getFullYear(), d.getMonth(), 1); x.setHours(0,0,0,0); return x; }
+function fmtKsh(n) { return 'Ksh ' + Number(n || 0).toLocaleString('en-KE'); }
+function relTime(iso) {
+  const sec = (Date.now() - new Date(iso).getTime()) / 1000;
+  if (sec < 60) return 'just now';
+  if (sec < 3600) return Math.floor(sec/60) + 'm ago';
+  if (sec < 86400) return Math.floor(sec/3600) + 'h ago';
+  const days = Math.floor(sec/86400);
+  if (days === 1) return 'yesterday';
+  if (days < 30) return days + 'd ago';
+  return new Date(iso).toLocaleDateString('en-KE', { day: 'numeric', month: 'short' });
+}
+
+function renderDashboard() {
+  const now = new Date();
+  const today0 = startOfDay(now);
+  const week0 = startOfWeek(now);
+  const month0 = startOfMonth(now);
+
+  const sold = bags.filter(b => b.sold && b.soldTo?.soldAt);
+  const buckets = [
+    { label: 'Today',     since: today0 },
+    { label: 'This week', since: week0  },
+    { label: 'This month',since: month0 },
+    { label: 'All time',  since: null   },
+  ].map(b => {
+    const items = b.since ? sold.filter(s => new Date(s.soldTo.soldAt) >= b.since) : sold;
+    const count = items.length;
+    const revenue = items.reduce((sum, s) => sum + Number(s.price || 0), 0);
+    return { ...b, count, revenue };
+  });
+
+  document.getElementById('kpiGrid').innerHTML = buckets.map(b => `
+    <div class="kpi-card">
+      <div class="kpi-label">${b.label}</div>
+      <div class="kpi-count">${b.count} <span class="kpi-unit">sold</span></div>
+      <div class="kpi-revenue">${fmtKsh(b.revenue)}</div>
+    </div>
+  `).join('');
+
+  // Top categories (by sold count, all-time)
+  const catCount = {};
+  const catRevenue = {};
+  for (const s of sold) {
+    const c = s.category || 'Other';
+    catCount[c] = (catCount[c] || 0) + 1;
+    catRevenue[c] = (catRevenue[c] || 0) + Number(s.price || 0);
+  }
+  const cats = Object.entries(catCount).sort((a,b) => b[1] - a[1]).slice(0, 6);
+  const maxCount = cats[0]?.[1] || 1;
+  document.getElementById('topCats').innerHTML = cats.length
+    ? cats.map(([cat, n]) => `
+        <div class="cat-bar">
+          <div class="cat-bar-row">
+            <span class="cat-bar-name">${escapeHtml(cat)}</span>
+            <span class="cat-bar-meta">${n} sold · ${fmtKsh(catRevenue[cat])}</span>
+          </div>
+          <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${(n/maxCount)*100}%"></div></div>
+        </div>`).join('')
+    : '<p style="color:#999;font-size:13px;">No sales yet — mark items sold to populate.</p>';
+
+  // Recent sales (last 6)
+  const recent = [...sold]
+    .sort((a,b) => new Date(b.soldTo.soldAt) - new Date(a.soldTo.soldAt))
+    .slice(0, 6);
+  document.getElementById('recentSales').innerHTML = recent.length
+    ? recent.map(s => `
+        <div class="recent-row">
+          <img src="${s.image}" alt="${escapeHtml(s.name)}">
+          <div class="recent-body">
+            <div class="recent-name">${escapeHtml(s.name)}</div>
+            <div class="recent-meta">${fmtKsh(s.price)} · ${escapeHtml(s.soldTo.name || 'Unknown buyer')} · ${relTime(s.soldTo.soldAt)}</div>
+          </div>
+        </div>`).join('')
+    : '<p style="color:#999;font-size:13px;">No sales recorded yet.</p>';
+}
 
 // ====== LIST ======
 function renderList() {

@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#0d0d0d">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css">
+<link rel="stylesheet" href="styles.css?v=11">
 <!-- GHL form submit captcha (enterprise reCAPTCHA v3) -->
 <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX" async defer></script>
 </head>
@@ -38,6 +38,20 @@
     </div>
   </div>
 
+  <section class="dash" id="salesDash">
+    <h2 class="dash-title">Sales Overview</h2>
+    <div class="kpi-grid" id="kpiGrid"></div>
+    <div class="dash-grid">
+      <div class="dash-card">
+        <h3>Top categories</h3>
+        <div id="topCats" class="cat-bars"></div>
+      </div>
+      <div class="dash-card">
+        <h3>Recent sales</h3>
+        <div id="recentSales" class="recent-list"></div>
+      </div>
+    </div>
+  </section>
 
   <div class="admin-form">
     <h2 id="formTitle">Add a new item</h2>
@@ -157,6 +171,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=6"></script>
+<script src="admin.js?v=7"></script>
 </body>
 </html>
