@@ -324,6 +324,10 @@ img { max-width: 100%; display: block; }
   font-size: 15px;
 }
 .shop-card a { color: var(--gold-deep); font-weight: 600; }
+.shop-map { margin-top: 14px; }
+.shop-map iframe { box-shadow: var(--shadow); }
+.map-link { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--gold-deep); }
+.map-link:hover { color: var(--ink); }
 .footer-shop { font-size: 13px; color: var(--ink-soft); }
 
 .pager-wrap {
