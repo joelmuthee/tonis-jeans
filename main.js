@@ -6,10 +6,12 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
   const filterMeta = document.getElementById('filterMeta');
   const availPills = document.getElementById('availPills');
   const catPills = document.getElementById('catPills');
+  const sizePills = document.getElementById('sizePills');
   let items = [];
   let settings = {};
   let currentAvail = 'all';
   let currentCat = 'all';
+  let currentSize = 'all';
 
   async function loadData() {
     try {
@@ -43,8 +45,27 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
   }
 
   function getCategories() {
-    const cats = [...new Set(items.map(i => i.category).filter(Boolean))].sort();
-    return cats;
+    return [...new Set(items.map(i => i.category).filter(Boolean))].sort();
+  }
+
+  function sortSize(a, b) {
+    const na = parseFloat(a), nb = parseFloat(b);
+    if (!isNaN(na) && !isNaN(nb)) return na - nb;
+    if (!isNaN(na)) return -1;
+    if (!isNaN(nb)) return 1;
+    const order = ['XS', 'S', 'M', 'L', 'XL', 'XXL', '3XL'];
+    const ia = order.indexOf(a.toUpperCase()), ib = order.indexOf(b.toUpperCase());
+    if (ia !== -1 && ib !== -1) return ia - ib;
+    if (ia !== -1) return -1;
+    if (ib !== -1) return 1;
+    return a.localeCompare(b);
+  }
+
+  function getSizesForCurrentCat() {
+    const pool = currentCat === 'all' ? items : items.filter(i => i.category === currentCat);
+    const all = new Set();
+    pool.forEach(i => (i.sizes || []).forEach(s => all.add(s)));
+    return [...all].sort(sortSize);
   }
 
   function buildCatPills() {
@@ -59,18 +80,52 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
         catPills.querySelectorAll('.pill--cat').forEach(x => x.classList.remove('active'));
         p.classList.add('active');
         currentCat = p.dataset.cat;
+        currentSize = 'all';
         render();
       });
     });
   }
 
+  function buildSizePills() {
+    const sizes = getSizesForCurrentCat();
+    if (sizes.length < 2) { sizePills.innerHTML = ''; return; }
+    sizePills.innerHTML = [
+      `<button class="pill pill--size ${currentSize === 'all' ? 'active' : ''}" data-size="all">All sizes</button>`,
+      ...sizes.map(s => `<button class="pill pill--size ${currentSize === s ? 'active' : ''}" data-size="${escapeHtml(s)}">${escapeHtml(s)}</button>`)
+    ].join('');
+    sizePills.querySelectorAll('.pill--size').forEach(p => {
+      p.addEventListener('click', () => {
+        sizePills.querySelectorAll('.pill--size').forEach(x => x.classList.remove('active'));
+        p.classList.add('active');
+        currentSize = p.dataset.size;
+        render();
+      });
+    });
+  }
+
+  function sizeMatch(item) {
+    if (currentSize === 'all') return true;
+    const sizes = item.sizes || [];
+    if (sizes.includes(currentSize)) return true;
+    // also match if any of the item's sizes is a range that contains the selected one
+    const target = parseFloat(currentSize);
+    if (!isNaN(target)) {
+      for (const s of sizes) {
+        const range = s.match(/(\d+)\s*[-–]\s*(\d+)/);
+        if (range && target >= parseFloat(range[1]) && target <= parseFloat(range[2])) return true;
+      }
+    }
+    return false;
+  }
+
   function render() {
     buildCatPills();
+    buildSizePills();
 
     const filtered = items.filter(item => {
       const availOk = currentAvail === 'all' || (currentAvail === 'sold' ? item.sold : !item.sold);
       const catOk = currentCat === 'all' || item.category === currentCat;
-      return availOk && catOk;
+      return availOk && catOk && sizeMatch(item);
     });
 
     const availCount = items.filter(i => !i.sold).length;
@@ -117,6 +172,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
       availPills.querySelectorAll('.pill').forEach(x => x.classList.remove('active'));
       p.classList.add('active');
       currentAvail = p.dataset.avail;
+      currentSize = 'all';
       render();
     });
   });
