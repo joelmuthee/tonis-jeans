@@ -166,7 +166,6 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
             <span class="card-price">${fmtPrice(item.price)} <small>· drop-off CBD</small></span>
           </div>
           <div class="card-actions">
-            <a class="btn-card" href="${reelHref}" target="_blank" rel="noopener">View on IG</a>
             <a class="btn-card primary" href="${whatsappLink(item)}" target="_blank" rel="noopener" ${item.sold ? 'aria-disabled="true"' : ''}>
               ${WA_SVG} ${item.sold ? 'Sold out' : 'Enquire'}
             </a>
