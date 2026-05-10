@@ -158,7 +158,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
           <div class="card-actions">
             <a class="btn-card" href="${reelHref}" target="_blank" rel="noopener">View on IG</a>
             <a class="btn-card primary" href="${whatsappLink(item)}" target="_blank" rel="noopener" ${item.sold ? 'aria-disabled="true"' : ''}>
-              ${item.sold ? 'Sold out' : `${WA_SVG} Enquire`}
+              ${WA_SVG} ${item.sold ? 'Sold out' : 'Enquire'}
             </a>
           </div>
         </div>
