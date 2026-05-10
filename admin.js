@@ -459,7 +459,7 @@ function renderDashboard() {
           </div>
           <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${(n/maxCount)*100}%"></div></div>
         </div>`).join('')
-    : '<p style="color:#999;font-size:13px;">No sales yet — mark items sold to populate.</p>';
+    : '<p style="color:#999;font-size:13px;">No sales yet. Mark items sold to populate.</p>';
 
   // Recent sales (last 6)
   const recent = [...sold]
