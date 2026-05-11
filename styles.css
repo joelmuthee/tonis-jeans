@@ -107,6 +107,7 @@ img { max-width: 100%; display: block; }
   transition: 0.3s;
 }
 
+.nav-close { display: none; }
 @media (max-width: 760px) {
   .nav-toggle { display: flex; }
   .nav-links {
@@ -128,6 +129,24 @@ img { max-width: 100%; display: block; }
     visibility: visible;
   }
   .nav-links a { font-size: 20px; }
+  .nav-close {
+    display: flex;
+    position: absolute;
+    top: 18px; right: 18px;
+    width: 44px; height: 44px;
+    background: transparent;
+    border: 1px solid rgba(245,166,35,0.35);
+    border-radius: 50%;
+    color: var(--gold-light);
+    font-size: 30px;
+    line-height: 1;
+    cursor: pointer;
+    align-items: center;
+    justify-content: center;
+    transition: 0.2s;
+    z-index: 2;
+  }
+  .nav-close:hover, .nav-close:focus { background: var(--gold); color: var(--ink); border-color: var(--gold); }
 }
 
 /* ===== HERO ===== */

@@ -296,8 +296,13 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
   // Mobile nav
   const navToggle = document.getElementById('navToggle');
   const navLinks = document.getElementById('navLinks');
-  navToggle?.addEventListener('click', () => navLinks.classList.toggle('open'));
-  navLinks?.querySelectorAll('a').forEach(a => a.addEventListener('click', () => navLinks.classList.remove('open')));
+  const navClose = document.getElementById('navClose');
+  function closeNav() { navLinks?.classList.remove('open'); document.body.style.overflow = ''; }
+  function openNav() { navLinks?.classList.add('open'); document.body.style.overflow = 'hidden'; }
+  navToggle?.addEventListener('click', () => navLinks.classList.contains('open') ? closeNav() : openNav());
+  navClose?.addEventListener('click', closeNav);
+  navLinks?.querySelectorAll('a').forEach(a => a.addEventListener('click', closeNav));
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && navLinks?.classList.contains('open')) closeNav(); });
 
   document.getElementById('year').textContent = new Date().getFullYear();
 
