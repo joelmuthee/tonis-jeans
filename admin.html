@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#1a1410">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=14">
+<link rel="stylesheet" href="styles.css?v=15">
 <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX" async defer></script>
 </head>
 <body style="background:#fff8ec;">
@@ -136,6 +136,22 @@
   <div class="admin-form" id="addForm">
     <h2 id="formTitle">Add a new item</h2>
     <input type="hidden" id="editingId">
+
+    <!-- ⚡ Instagram quick-add (preferred path) -->
+    <div class="ig-quick-add">
+      <label class="ig-quick-label">
+        <span class="ig-bolt">⚡</span>
+        <span>Paste an Instagram post URL <em>(fastest way to add)</em></span>
+      </label>
+      <p class="ig-quick-help">Auto-fills the image, extra images (carousels) and caption. Works on public IG posts.</p>
+      <div class="ig-quick-row">
+        <input id="igQuickInput" type="url" placeholder="https://www.instagram.com/p/...">
+        <button class="btn-admin gold" id="igQuickBtn" type="button">Fetch from Instagram</button>
+      </div>
+      <p id="igQuickStatus" class="ig-quick-status"></p>
+    </div>
+
+    <div class="manual-divider"><span>or add manually below</span></div>
 
     <div class="field">
       <label>Main image</label>
@@ -294,6 +310,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=13"></script>
+<script src="admin.js?v=14"></script>
 </body>
 </html>

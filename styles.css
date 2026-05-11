@@ -653,6 +653,80 @@ html { scroll-behavior: smooth; }
 /* Form */
 .admin-form { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 24px; margin-bottom: 24px; }
 .admin-form h2 { font-family: var(--serif); font-size: 24px; margin-bottom: 18px; }
+
+/* IG quick-add panel — preferred path, sits at top of form */
+.ig-quick-add {
+  background: linear-gradient(135deg, var(--gold-light), #ffd98a 60%, var(--gold));
+  border: 2px solid var(--gold-deep);
+  border-radius: 12px;
+  padding: 18px 20px 16px;
+  margin-bottom: 18px;
+  box-shadow: 0 4px 14px rgba(245,166,35,0.18);
+  position: relative;
+}
+.ig-quick-add::before {
+  content: 'RECOMMENDED';
+  position: absolute;
+  top: -10px; left: 16px;
+  background: var(--ink);
+  color: var(--gold-light);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  padding: 3px 10px;
+  border-radius: 99px;
+}
+.ig-quick-label {
+  display: flex; align-items: center; gap: 8px;
+  font-family: var(--serif);
+  font-size: 19px;
+  font-weight: 600;
+  color: var(--ink);
+  margin-bottom: 4px;
+}
+.ig-quick-label em { font-style: normal; font-family: var(--sans); font-size: 13px; font-weight: 500; color: var(--ink-soft); margin-left: 4px; }
+.ig-bolt {
+  display: inline-flex; align-items: center; justify-content: center;
+  width: 30px; height: 30px;
+  background: var(--ink);
+  color: var(--gold);
+  border-radius: 50%;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+.ig-quick-help {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin: 4px 0 12px;
+}
+.ig-quick-row {
+  display: flex; gap: 8px;
+}
+.ig-quick-row input[type="url"] {
+  flex: 1;
+  padding: 12px 14px;
+  border: 1px solid var(--ink);
+  border-radius: 8px;
+  font-family: inherit;
+  font-size: 14px;
+  background: #fff;
+  color: var(--ink);
+}
+.ig-quick-row input[type="url"]:focus { outline: none; border-color: var(--gold-deep); box-shadow: 0 0 0 3px rgba(217,143,16,0.2); }
+.ig-quick-row .btn-admin { flex-shrink: 0; padding: 12px 18px; }
+.ig-quick-status { font-size: 13px; margin: 10px 0 0; min-height: 18px; font-weight: 500; }
+.ig-quick-status.ok { color: #1a7a40; }
+.ig-quick-status.err { color: #b00020; }
+
+.manual-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 18px 0 18px;
+  font-size: 12px; letter-spacing: 0.12em; text-transform: uppercase;
+  color: var(--ink-faint);
+}
+.manual-divider::before, .manual-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--line);
+}
 .field { margin-bottom: 14px; }
 .field label { display: block; font-size: 13px; font-weight: 600; color: var(--ink-soft); margin-bottom: 6px; }
 .field input[type="text"], .field input[type="number"], .field input[type="url"], .field input[type="tel"], .field input[type="password"], .field textarea, .field select {

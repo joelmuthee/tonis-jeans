@@ -134,6 +134,104 @@ export default {
       return json({ path: `/img/${name}`, name });
     }
 
+    // ---- IG quick-add: server-side fetch of a public Instagram post ----
+    // Lets the admin paste an IG URL and auto-fill image + caption. CORS prevents this from
+    // the browser, so we proxy through the Worker.
+    if (request.method === "GET" && path === "/api/ig-fetch") {
+      const igUrl = url.searchParams.get("url");
+      if (!igUrl) return json({ error: "url required" }, 400);
+      const m = igUrl.match(/instagram\.com\/(?:p|reel|tv)\/([A-Za-z0-9_-]+)/i);
+      if (!m) return json({ error: "not an Instagram post URL" }, 400);
+      const code = m[1];
+
+      const headers = {
+        "User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Sec-Fetch-Dest": "document",
+        "Sec-Fetch-Mode": "navigate",
+        "Sec-Fetch-Site": "none",
+        "Upgrade-Insecure-Requests": "1",
+      };
+
+      try {
+        let caption = "", imageUrl = "", imageUrls = [];
+
+        // 1. Embed page (most bot-friendly).
+        const embedRes = await fetch(`https://www.instagram.com/p/${code}/embed/captioned/`, { headers });
+        if (embedRes.ok) {
+          const html = await embedRes.text();
+          const img = html.match(/<img[^>]+class=["'][^"']*EmbeddedMediaImage[^"']*["'][^>]+src=["']([^"']+)["']/i)
+            || html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+          if (img) imageUrl = img[1].replace(/&amp;/g, "&");
+          const capDiv = html.match(/<div[^>]+class=["'][^"']*Caption[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
+          if (capDiv) caption = capDiv[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          if (!caption) {
+            const desc = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i);
+            if (desc) caption = desc[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+          }
+        }
+
+        // 2. JSON endpoint (gives full carousel).
+        try {
+          const jsonRes = await fetch(`https://www.instagram.com/p/${code}/?__a=1&__d=dis`, {
+            headers: { ...headers, "X-IG-App-ID": "936619743392459" },
+          });
+          if (jsonRes.ok) {
+            const text = await jsonRes.text();
+            if (text.trim().startsWith("{")) {
+              const data = JSON.parse(text);
+              const media = data?.graphql?.shortcode_media || data?.items?.[0] || data?.shortcode_media;
+              if (media) {
+                const children = media.edge_sidecar_to_children?.edges?.map(e => e.node) || media.carousel_media || [];
+                if (children.length) {
+                  imageUrls = children.map(c => c.display_url || c.image_versions2?.candidates?.[0]?.url).filter(Boolean);
+                }
+                if (!imageUrls.length) {
+                  const single = media.display_url || media.image_versions2?.candidates?.[0]?.url;
+                  if (single) imageUrls = [single];
+                }
+                if (!caption) {
+                  const cap = media.edge_media_to_caption?.edges?.[0]?.node?.text || media.caption?.text;
+                  if (cap) caption = cap;
+                }
+              }
+            }
+          }
+        } catch (_) {}
+
+        // 3. Final fallback: post-page OG tags.
+        if (!imageUrl && !imageUrls.length) {
+          const pageRes = await fetch(`https://www.instagram.com/p/${code}/`, { headers });
+          if (pageRes.ok) {
+            const html = await pageRes.text();
+            const img = html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
+            const desc = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i);
+            if (img) imageUrl = img[1].replace(/&amp;/g, "&");
+            if (desc && !caption) {
+              caption = desc[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+              const m1 = caption.match(/^"(.+)"\s*-\s*@/s);
+              if (m1) caption = m1[1];
+            }
+          }
+        }
+
+        if (!imageUrls.length && imageUrl) imageUrls = [imageUrl];
+        if (!imageUrls.length) return json({ error: "Instagram blocked the request. Paste images manually instead." }, 502);
+
+        return json({
+          code,
+          imageUrl: imageUrls[0],
+          imageUrls,
+          caption,
+          postUrl: `https://www.instagram.com/p/${code}/`,
+          isCarousel: imageUrls.length > 1,
+        });
+      } catch (err) {
+        return json({ error: err.message }, 502);
+      }
+    }
+
     return json({ error: "not found" }, 404);
   },
 };

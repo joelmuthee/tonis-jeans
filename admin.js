@@ -165,6 +165,73 @@ function renderExtraImagesPreview() {
   });
 }
 
+// ====== IG QUICK-ADD ======
+let stagedInstagramUrl = '';
+
+document.getElementById('igQuickBtn')?.addEventListener('click', async () => {
+  const url = document.getElementById('igQuickInput').value.trim();
+  const status = document.getElementById('igQuickStatus');
+  if (!url) { status.textContent = 'Paste an Instagram URL first.'; status.className = 'ig-quick-status err'; return; }
+  if (!/instagram\.com\/(?:p|reel|tv)\//i.test(url)) {
+    status.textContent = "That doesn't look like an Instagram post URL.";
+    status.className = 'ig-quick-status err'; return;
+  }
+
+  status.textContent = 'Fetching from Instagram…';
+  status.className = 'ig-quick-status';
+
+  try {
+    const r = await fetch(`${API_BASE}/api/ig-fetch?url=${encodeURIComponent(url)}`);
+    const data = await r.json();
+    if (!r.ok || data.error) throw new Error(data.error || 'Fetch failed');
+
+    async function downloadAndStage(imgUrl) {
+      const r = await fetch(imgUrl);
+      if (!r.ok) throw new Error('Image download failed');
+      const blob = await r.blob();
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onload = () => {
+          const dataUrl = reader.result;
+          resolve({ base64: dataUrl.split(',')[1], ext: 'jpg', dataUrl });
+        };
+        reader.onerror = reject;
+        reader.readAsDataURL(blob);
+      });
+    }
+
+    stagedImage = await downloadAndStage(data.imageUrl);
+    imagePreview.innerHTML = `<img src="${stagedImage.dataUrl}" style="max-width:180px;border-radius:8px;margin-top:4px;">`;
+
+    stagedExtras = [];
+    const extras = (data.imageUrls || []).slice(1);
+    if (extras.length) {
+      status.textContent = `Downloading ${extras.length} more image${extras.length === 1 ? '' : 's'}…`;
+      for (const u of extras) {
+        try { stagedExtras.push(await downloadAndStage(u)); } catch (_) {}
+      }
+      renderExtraImagesPreview();
+    }
+
+    const cap = (data.caption || '').replace(/^[a-z0-9._]+\s+/i, '').trim();
+    document.getElementById('descInput').value = cap;
+
+    if (!document.getElementById('nameInput').value && cap) {
+      const firstLine = cap.split(/[.!?\n]/)[0].trim().slice(0, 60);
+      document.getElementById('nameInput').value = firstLine.charAt(0).toUpperCase() + firstLine.slice(1);
+    }
+
+    stagedInstagramUrl = data.postUrl;
+    const reelEl = document.getElementById('reelInput');
+    if (reelEl) reelEl.value = data.postUrl;
+    status.textContent = '✓ Image and caption loaded. Review the name, category, price and sizes, then Save.';
+    status.className = 'ig-quick-status ok';
+  } catch (err) {
+    status.textContent = '✗ ' + err.message + ' — paste image and write description manually instead.';
+    status.className = 'ig-quick-status err';
+  }
+});
+
 // ====== STOCK READ/WRITE ======
 function getStockFromForm() {
   const stock = {};
@@ -316,6 +383,11 @@ function resetForm() {
   stagedImage = null;
   stagedExtras = [];
   renderExtraImagesPreview();
+  stagedInstagramUrl = '';
+  const igInput = document.getElementById('igQuickInput');
+  if (igInput) igInput.value = '';
+  const igStatus = document.getElementById('igQuickStatus');
+  if (igStatus) { igStatus.textContent = ''; igStatus.className = 'ig-quick-status'; }
   document.getElementById('formTitle').textContent = 'Add a new item';
   document.getElementById('cancelBtn').style.display = 'none';
 }
