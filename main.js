@@ -1,4 +1,4 @@
-// Toni's Jeans & Tees — frontend catalog
+// Toni's Jeans & Tees - frontend catalog
 const IMG_VERSION = 'v1';
 const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
 (async function() {

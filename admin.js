@@ -272,7 +272,7 @@ async function toggleSold(id) {
   const bag = bags.find(b => b.id === id);
   if (!bag) return;
 
-  // Unmarking sold — no buyer prompt
+  // Unmarking sold - no buyer prompt
   if (bag.sold) {
     bag.sold = false;
     delete bag.soldTo;
@@ -288,13 +288,13 @@ async function toggleSold(id) {
     return;
   }
 
-  // Marking sold — open buyer capture modal
+  // Marking sold - open buyer capture modal
   openBuyerModal(bag);
 }
 
 // ====== BUYER CAPTURE MODAL ======
 // Buyer details get forwarded to GHL through the Worker (/api/buyer) which
-// proxies to the public GHL form endpoint — bypasses CORS + browser reCAPTCHA.
+// proxies to the public GHL form endpoint - bypasses CORS + browser reCAPTCHA.
 
 const buyerModal = document.getElementById('buyerModal');
 const buyerName = document.getElementById('buyerName');
