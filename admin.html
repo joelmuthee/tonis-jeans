@@ -192,7 +192,7 @@
     </div>
 
     <div class="field">
-      <label>Stock <small style="font-weight:400;color:#999;">enter quantity per size, or use "One size" if it doesn't come in sizes (caps, etc.)</small></label>
+      <label>Available sizes <small style="font-weight:400;color:#999;">thrift = one-of-one. Tick a size and leave qty as 1, unless you actually have multiples of the same piece.</small></label>
 
       <div class="stock-entry-group">
         <label class="group-label">One size / no sizing</label>
@@ -257,7 +257,7 @@
 <div id="saleModal" class="modal" style="display:none;">
   <div class="modal-card">
     <h3 id="saleModalTitle">Record a sale</h3>
-    <p class="sub">Reduce stock and optionally save buyer details for remarketing.</p>
+    <p class="sub">Marks this piece sold and optionally saves the buyer's details for future remarketing.</p>
 
     <div class="field">
       <label>Size sold</label>
@@ -294,26 +294,6 @@
   </div>
 </div>
 
-<!-- RESTOCK MODAL -->
-<div id="restockModal" class="modal" style="display:none;">
-  <div class="modal-card">
-    <h3 id="restockModalTitle">Restock item</h3>
-    <p class="sub">Add units to existing stock.</p>
-    <div class="field">
-      <label>Size</label>
-      <select id="restockSizeInput"></select>
-    </div>
-    <div class="field">
-      <label>Units to add</label>
-      <input id="restockQtyInput" type="number" min="1" value="1">
-    </div>
-    <div class="admin-actions" style="margin-top:18px;">
-      <button class="btn-admin primary" id="restockSaveBtn">Add stock</button>
-      <button class="btn-admin danger" id="restockCancelBtn">Cancel</button>
-    </div>
-  </div>
-</div>
-
-<script src="admin.js?v=12"></script>
+<script src="admin.js?v=13"></script>
 </body>
 </html>

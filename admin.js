@@ -10,7 +10,6 @@ let editingId = null;
 let stagedImage = null;
 let stagedExtras = [];
 let pendingSaleId = null;
-let pendingRestockId = null;
 
 // ====== AUTH ======
 const loginScreen = document.getElementById('loginScreen');
@@ -402,6 +401,7 @@ document.getElementById('saleSaveBtn').addEventListener('click', async () => {
   const qty = parseInt(saleQtyInput.value, 10) || 1;
   const salePrice = parseInt(salePriceInput.value, 10) || bag.price;
 
+  // Thrift: a sold piece is gone. Zero the stock for that size; no restock.
   if (bag.stock && bag.stock[size] !== undefined) {
     bag.stock[size] = Math.max(0, bag.stock[size] - qty);
   }
@@ -428,50 +428,6 @@ document.getElementById('saleSaveBtn').addEventListener('click', async () => {
 
 document.getElementById('saleCancelBtn').addEventListener('click', closeSaleModal);
 saleModal.addEventListener('click', e => { if (e.target === saleModal) closeSaleModal(); });
-
-// ====== RESTOCK MODAL ======
-const restockModal = document.getElementById('restockModal');
-const restockSizeInput = document.getElementById('restockSizeInput');
-const restockQtyInput = document.getElementById('restockQtyInput');
-
-function openRestockModal(id) {
-  const bag = bags.find(b => b.id === id);
-  if (!bag) return;
-  pendingRestockId = id;
-  document.getElementById('restockModalTitle').textContent = `Restock: ${bag.name}`;
-  restockSizeInput.innerHTML = '';
-  const ALL_SIZES = ['One Size','XS','S','M','L','XL','XXL','3XL','28','30','32','34','36','38','40'];
-  ALL_SIZES.forEach(sz => {
-    const opt = document.createElement('option'); opt.value = sz;
-    const cur = bag.stock?.[sz] || 0;
-    opt.textContent = `${sz} (currently ${cur})`;
-    restockSizeInput.appendChild(opt);
-  });
-  restockQtyInput.value = 1;
-  restockModal.style.display = 'flex';
-}
-
-function closeRestockModal() { restockModal.style.display = 'none'; pendingRestockId = null; }
-
-document.getElementById('restockSaveBtn').addEventListener('click', async () => {
-  const bag = bags.find(b => b.id === pendingRestockId);
-  if (!bag) return;
-  const size = restockSizeInput.value;
-  const qty = parseInt(restockQtyInput.value, 10) || 0;
-  if (qty <= 0) { showToast('Enter a quantity to add.'); return; }
-  if (!bag.stock) bag.stock = {};
-  bag.stock[size] = (bag.stock[size] || 0) + qty;
-  closeRestockModal();
-  try {
-    await apiPublish();
-    renderList();
-    renderInventory();
-    showToast(`+${qty} ${size} added to stock.`);
-  } catch (err) { showToast('Error: ' + err.message); }
-});
-
-document.getElementById('restockCancelBtn').addEventListener('click', closeRestockModal);
-restockModal.addEventListener('click', e => { if (e.target === restockModal) closeRestockModal(); });
 
 // ====== GHL INTEGRATION ======
 const GHL_RECAPTCHA_KEY = '6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX';
@@ -594,11 +550,11 @@ function renderInventory() {
   });
 
   document.getElementById('invKpiGrid').innerHTML = [
-    { label: 'Total items', val: totalItems, sub: 'SKUs listed', cls: '' },
-    { label: 'Units in stock', val: totalUnits.toLocaleString(), sub: 'across all sizes', cls: 'success' },
-    { label: 'Inventory value', val: fmtKsh(totalValue), sub: 'at listed prices', cls: '' },
-    { label: 'Low stock', val: lowStock, sub: 'up to 5 units left', cls: lowStock > 0 ? 'warn' : '' },
-    { label: 'Out of stock', val: outOfStock, sub: 'need restocking', cls: outOfStock > 0 ? 'danger' : '' },
+    { label: 'Total items', val: totalItems, sub: 'pieces listed', cls: '' },
+    { label: 'Available', val: totalUnits.toLocaleString(), sub: 'still in stock', cls: 'success' },
+    { label: 'Catalog value', val: fmtKsh(totalValue), sub: 'at listed prices', cls: '' },
+    { label: 'Almost gone', val: lowStock, sub: 'few units left', cls: lowStock > 0 ? 'warn' : '' },
+    { label: 'Sold', val: outOfStock, sub: 'no units remaining', cls: outOfStock > 0 ? 'danger' : '' },
   ].map(k => `
     <div class="inv-kpi ${k.cls}">
       <div class="inv-kpi-label">${k.label}</div>
@@ -611,7 +567,7 @@ function renderInventory() {
   if (filterBar) {
     filterBar.innerHTML = `
       <button class="pill ${invFilter==='attention'?'active':''}" data-inv-filter="attention">
-        Needs attention <span class="admin-nav-count">${attentionBags.length}</span>
+        Almost gone / sold <span class="admin-nav-count">${attentionBags.length}</span>
       </button>
       <button class="pill ${invFilter==='all'?'active':''}" data-inv-filter="all">
         All items <span class="admin-nav-count">${bags.length}</span>
@@ -647,8 +603,8 @@ function renderInventory() {
         }).join('')
       : '<span style="color:#999;font-size:12px;">No sizes set</span>';
 
-    const statusCls = units === 0 ? 'zero' : units <= 5 ? 'low' : 'ok';
-    const statusLabel = units === 0 ? 'Out of stock' : units <= 5 ? 'Low stock' : 'In stock';
+    const statusCls = units === 0 ? 'zero' : units <= 3 ? 'low' : 'ok';
+    const statusLabel = units === 0 ? 'Sold' : units <= 3 ? 'Almost gone' : 'Available';
 
     return `
     <tr>
@@ -663,10 +619,10 @@ function renderInventory() {
       <td style="font-weight:700;font-size:14px;">${units}</td>
       <td><span class="stock-pill ${statusCls}">${statusLabel}</span></td>
       <td>
-        <button class="restock-btn" onclick="openRestockModal('${bag.id}')">+ Restock</button>
+        <button class="restock-btn" onclick="editItem('${bag.id}')">Edit sizes</button>
       </td>
     </tr>`;
-  }).join('') || `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink-faint);">${invFilter === 'attention' ? '🎉 Nothing needs attention. All items have healthy stock.' : 'No items yet.'}</td></tr>`;
+  }).join('') || `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink-faint);">${invFilter === 'attention' ? 'No items are almost gone or sold yet.' : 'No items yet.'}</td></tr>`;
 
   const toggle = document.getElementById('invShowMore');
   if (toggle) {
@@ -708,7 +664,6 @@ function renderList() {
         <div class="admin-card-actions">
           <button onclick="editItem('${bag.id}')">Edit</button>
           <button onclick="openSaleModal('${bag.id}')" style="background:#f0faf4;border-color:#b0d8c0;color:#1a7a40;">Record sale</button>
-          <button onclick="openRestockModal('${bag.id}')">Restock</button>
           <button class="danger" onclick="deleteItem('${bag.id}')">Delete</button>
         </div>
       </div>
@@ -763,7 +718,6 @@ async function bulkSetCategory() {
 window.editItem = editItem;
 window.deleteItem = deleteItem;
 window.openSaleModal = openSaleModal;
-window.openRestockModal = openRestockModal;
 window.bulkClear = bulkClear;
 window.bulkSelectAll = bulkSelectAll;
 window.bulkDelete = bulkDelete;
