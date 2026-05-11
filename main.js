@@ -35,10 +35,41 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     return 'Ksh ' + Number(n).toLocaleString('en-KE');
   }
 
+  // Stock helpers - read the new schema (stock {} + sales []) with graceful fallback to legacy sizes[].
+  function totalStock(item) {
+    if (item.stock && Object.keys(item.stock).length) {
+      return Object.values(item.stock).reduce((s, q) => s + (Number(q) || 0), 0);
+    }
+    // Legacy: assume 1 unit per listed size
+    return (item.sizes || []).length;
+  }
+  function availSizes(item) {
+    if (item.stock && Object.keys(item.stock).length) {
+      const hasSales = (item.sales || []).length > 0;
+      // Before any recorded sale, show every configured size. After sales begin, hide zero-stock sizes.
+      const keys = hasSales
+        ? Object.entries(item.stock).filter(([, q]) => q > 0).map(([s]) => s)
+        : Object.keys(item.stock);
+      return keys.filter(s => s !== 'One Size').sort(sortSize);
+    }
+    return (item.sizes || []).slice().sort(sortSize);
+  }
+  function isSoldOut(item) {
+    // Legacy fallback
+    if (typeof item.sold === 'boolean' && (!item.stock || !Object.keys(item.stock).length)) return item.sold;
+    // New schema: every configured size at 0 AND at least one sale recorded
+    if (!item.stock || !Object.keys(item.stock).length) return false;
+    const allZero = Object.values(item.stock).every(q => (q || 0) === 0);
+    if (!allZero) return false;
+    return (item.sales || []).length > 0;
+  }
+
   function whatsappLink(item) {
     const phone = (settings.whatsappNumber || '254721623937');
-    const sizePart = item.sizes && item.sizes.length ? ` (sizes: ${item.sizes.join(', ')})` : '';
-    const msg = `Hi Toni! I'd like to enquire about the *${item.name}*${sizePart} (${fmtPrice(item.price)}) from your catalog.\n\nLink: ${item.reel || 'https://www.instagram.com/tonis_jeans_and_tees/'}`;
+    const avail = availSizes(item);
+    const sizePart = avail.length ? ` (sizes: ${avail.join(', ')})` : '';
+    const link = item.reel || item.instagramUrl || 'https://www.instagram.com/tonis_jeans_and_tees/';
+    const msg = `Hi Toni! I'd like to enquire about the *${item.name}*${sizePart} (${fmtPrice(item.price)}) from your catalog.\n\nLink: ${link}`;
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   }
 
@@ -66,7 +97,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
   function getSizesForCurrentCat() {
     const pool = currentCat === 'all' ? items : items.filter(i => i.category === currentCat);
     const all = new Set();
-    pool.forEach(i => (i.sizes || []).forEach(s => all.add(s)));
+    pool.forEach(i => availSizes(i).forEach(s => all.add(s)));
     return [...all].sort(sortSize);
   }
 
@@ -109,9 +140,8 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
 
   function sizeMatch(item) {
     if (currentSize === 'all') return true;
-    const sizes = item.sizes || [];
+    const sizes = availSizes(item);
     if (sizes.includes(currentSize)) return true;
-    // also match if any of the item's sizes is a range that contains the selected one
     const target = parseFloat(currentSize);
     if (!isNaN(target)) {
       for (const s of sizes) {
@@ -127,12 +157,13 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     buildSizePills();
 
     const filtered = items.filter(item => {
-      const availOk = currentAvail === 'all' || (currentAvail === 'sold' ? item.sold : !item.sold);
+      const soldOut = isSoldOut(item);
+      const availOk = currentAvail === 'all' || (currentAvail === 'sold' ? soldOut : !soldOut);
       const catOk = currentCat === 'all' || item.category === currentCat;
       return availOk && catOk && sizeMatch(item);
     });
 
-    const availCount = items.filter(i => !i.sold).length;
+    const availCount = items.filter(i => !isSoldOut(i)).length;
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
     if (currentPage > totalPages) currentPage = totalPages;
     const start = (currentPage - 1) * PAGE_SIZE;
@@ -144,18 +175,22 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     const WA_SVG = `<svg class="wa-icon" viewBox="0 0 24 24" width="16" height="16" fill="currentColor" aria-hidden="true"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.71.306 1.263.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 0 1-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 0 1-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 0 1 2.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0 0 12.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 0 0 5.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 0 0-3.48-8.413"/></svg>`;
 
     gallery.innerHTML = visible.map(item => {
-      const sizesHtml = item.sizes && item.sizes.length
-        ? `<div class="size-chips">${item.sizes.map(s => `<span class="size-chip">${escapeHtml(s)}</span>`).join('')}</div>`
+      const soldOut = isSoldOut(item);
+      const avail = availSizes(item);
+      const sizesHtml = avail.length
+        ? `<div class="size-chips">${avail.map(s => `<span class="size-chip">${escapeHtml(s)}</span>`).join('')}</div>`
         : '';
       const catBadge = item.category
         ? `<span class="badge-cat">${escapeHtml(item.category)}</span>`
         : '';
-      const reelHref = item.reel || 'https://www.instagram.com/tonis_jeans_and_tees/';
+      const units = totalStock(item);
+      const lowStock = !soldOut && units >= 1 && units <= 3;
       return `
-      <article class="card ${item.sold ? 'sold' : ''}">
+      <article class="card ${soldOut ? 'sold' : ''}">
         <div class="card-img-wrap" data-action="zoom" data-id="${item.id}">
           <img class="card-img" src="${item.image}?${IMG_VERSION}" alt="${escapeHtml(item.name)}" loading="lazy">
-          ${item.sold ? '<span class="badge-sold">Sold</span>' : ''}
+          ${soldOut ? '<span class="badge-sold">Sold out</span>' : ''}
+          ${lowStock ? `<span class="badge-low">Only ${units} left</span>` : ''}
           ${catBadge}
         </div>
         <div class="card-body">
@@ -166,8 +201,8 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
             <span class="card-price">${fmtPrice(item.price)} <small>· drop-off CBD</small></span>
           </div>
           <div class="card-actions">
-            <a class="btn-card primary" href="${whatsappLink(item)}" target="_blank" rel="noopener" ${item.sold ? 'aria-disabled="true"' : ''}>
-              ${WA_SVG} ${item.sold ? 'Sold out' : 'Enquire'}
+            <a class="btn-card primary" href="${whatsappLink(item)}" target="_blank" rel="noopener" ${soldOut ? 'aria-disabled="true"' : ''}>
+              ${WA_SVG} ${soldOut ? 'Sold out' : 'Enquire'}
             </a>
           </div>
         </div>
@@ -246,7 +281,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     if (!item) return;
     lightboxImg.src = item.image + '?' + IMG_VERSION;
     lightboxImg.alt = item.name;
-    lightboxCap.textContent = `${item.name} · ${fmtPrice(item.price)}${item.sold ? ' · SOLD' : ''}`;
+    lightboxCap.textContent = `${item.name} · ${fmtPrice(item.price)}${isSoldOut(item) ? ' · SOLD' : ''}`;
     lightbox.classList.add('open');
     lightbox.setAttribute('aria-hidden', 'false');
   });

@@ -2,12 +2,15 @@
 const ADMIN_PASSWORD = 'toni123';
 const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
 const ADMIN_TOKEN = atob('R3J2bjl3NmVWaDVWc242LTd5cVhrNzk4ZW5hR0hWall5VnM3dkxZRk9Naw==');
+const SITE_URL = 'https://tonisjeans.essenceautomations.com';
 
 let bags = [];
 let settings = {};
 let editingId = null;
-// stagedImage = { base64: '...pure base64...', ext: 'jpg', dataUrl: 'data:...' } | null
 let stagedImage = null;
+let stagedExtras = [];
+let pendingSaleId = null;
+let pendingRestockId = null;
 
 // ====== AUTH ======
 const loginScreen = document.getElementById('loginScreen');
@@ -17,7 +20,7 @@ const loginPassword = document.getElementById('loginPassword');
 const loginError = document.getElementById('loginError');
 
 function checkAuth() {
-  if (sessionStorage.getItem('thriftlux_auth') === '1') {
+  if (sessionStorage.getItem('toni_auth') === '1') {
     loginScreen.style.display = 'none';
     dashboard.style.display = 'block';
     init();
@@ -27,7 +30,7 @@ loginBtn.addEventListener('click', login);
 loginPassword.addEventListener('keypress', e => { if (e.key === 'Enter') login(); });
 function login() {
   if (loginPassword.value === ADMIN_PASSWORD) {
-    sessionStorage.setItem('thriftlux_auth', '1');
+    sessionStorage.setItem('toni_auth', '1');
     loginError.style.display = 'none';
     checkAuth();
   } else {
@@ -35,7 +38,7 @@ function login() {
   }
 }
 document.getElementById('logoutBtn').addEventListener('click', () => {
-  sessionStorage.removeItem('thriftlux_auth');
+  sessionStorage.removeItem('toni_auth');
   location.reload();
 });
 
@@ -46,10 +49,7 @@ async function apiUploadImage(base64, ext) {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
     body: JSON.stringify({ base64, ext }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Upload failed: ${res.status}`);
-  }
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `Upload failed: ${res.status}`); }
   const data = await res.json();
   return `${API_BASE}${data.path}`;
 }
@@ -60,10 +60,7 @@ async function apiPublish() {
     headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
     body: JSON.stringify({ bags, settings }),
   });
-  if (!res.ok) {
-    const err = await res.json().catch(() => ({}));
-    throw new Error(err.error || `Save failed: ${res.status}`);
-  }
+  if (!res.ok) { const e = await res.json().catch(() => ({})); throw new Error(e.error || `Save failed: ${res.status}`); }
 }
 
 async function loadData() {
@@ -73,45 +70,42 @@ async function loadData() {
   settings = json.settings || {};
 }
 
-// ====== TOAST ======
+// ====== HELPERS ======
 const toast = document.getElementById('toast');
-function showToast(msg) {
-  toast.textContent = msg;
-  toast.classList.add('show');
-  setTimeout(() => toast.classList.remove('show'), 2800);
-}
+function showToast(msg) { toast.textContent = msg; toast.classList.add('show'); setTimeout(() => toast.classList.remove('show'), 2800); }
 
 function setSaving(on) {
   const btn = document.getElementById('saveBtn');
   btn.disabled = on;
-  btn.textContent = on ? 'Publishing…' : 'Save bag';
+  btn.textContent = on ? 'Publishing…' : 'Save item';
 }
 
-// ====== FORM ======
+function escapeHtml(s) {
+  return String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+}
+
+function fmtKsh(n) { return 'Ksh ' + Number(n || 0).toLocaleString('en-KE'); }
+
+function totalStock(item) {
+  if (!item.stock) return 0;
+  return Object.values(item.stock).reduce((s, q) => s + (Number(q) || 0), 0);
+}
+
+function isSoldOut(item) { return totalStock(item) === 0; }
+
+function allSales(item) { return item.sales || []; }
+
+function totalUnitsSold(item) {
+  return allSales(item).reduce((s, r) => s + (Number(r.qty) || 1), 0);
+}
+
+function totalRevenue(item) {
+  return allSales(item).reduce((s, r) => s + (Number(r.salePrice || item.price) * (Number(r.qty) || 1)), 0);
+}
+
+// ====== IMAGES ======
 const imageInput = document.getElementById('imageInput');
 const imagePreview = document.getElementById('imagePreview');
-const nameInput = document.getElementById('nameInput');
-const categoryInput = document.getElementById('categoryInput');
-const descInput = document.getElementById('descInput');
-const priceInput = document.getElementById('priceInput');
-const reelInput = document.getElementById('reelInput');
-const soldInput = document.getElementById('soldInput');
-const editingIdField = document.getElementById('editingId');
-const formTitle = document.getElementById('formTitle');
-const cancelBtn = document.getElementById('cancelBtn');
-
-function getSelectedSizes() {
-  return [...document.querySelectorAll('#sizeToggleGroup input[name="size"]:checked')].map(cb => cb.value);
-}
-function setSelectedSizes(sizes) {
-  document.querySelectorAll('#sizeToggleGroup input[name="size"]').forEach(cb => {
-    cb.checked = !!(sizes && sizes.includes(cb.value));
-  });
-}
-function clearSizes() {
-  document.querySelectorAll('#sizeToggleGroup input[name="size"]').forEach(cb => { cb.checked = false; });
-}
-
 imageInput.addEventListener('change', e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -119,61 +113,131 @@ imageInput.addEventListener('change', e => {
   const reader = new FileReader();
   reader.onload = () => {
     const dataUrl = reader.result;
-    const base64 = dataUrl.split(',')[1];
-    stagedImage = { base64, ext, dataUrl };
-    imagePreview.innerHTML = `<img src="${dataUrl}" style="max-width:200px;border-radius:8px;">`;
+    stagedImage = { base64: dataUrl.split(',')[1], ext, dataUrl };
+    imagePreview.innerHTML = `<img src="${dataUrl}" style="max-width:180px;border-radius:8px;margin-top:4px;">`;
   };
   reader.readAsDataURL(file);
 });
 
-document.getElementById('aiBtn').addEventListener('click', () => {
-  const name = nameInput.value.trim();
-  if (!name) { showToast('Type the bag name first.'); return; }
-  descInput.value = generateDescription(name);
-});
+const extraImagesInput = document.getElementById('extraImagesInput');
+const extraImagesPreview = document.getElementById('extraImagesPreview');
 
-function generateDescription(name) {
-  const lower = name.toLowerCase();
-  const colors = { 'black':'sleek black', 'white':'crisp white', 'beige':'warm beige', 'brown':'rich brown', 'caramel':'warm caramel', 'grey':'soft grey', 'gray':'soft grey', 'blue':'deep blue', 'denim':'denim blue', 'green':'rich green', 'cream':'soft cream' };
-  let color = '';
-  for (const c in colors) if (lower.includes(c)) { color = colors[c]; break; }
-  const mats = ['leather','suede','patent','canvas','denim','vegan leather'];
-  let mat = mats.find(m => lower.includes(m)) || 'leather';
-  const styles = ['crossbody','shoulder','tote','clutch','hobo','bucket','baguette','top handle','sling','chain'];
-  let style = styles.find(s => lower.includes(s)) || 'handbag';
-  const openers = [
-    `Beautifully crafted ${color || 'designer'} ${mat} ${style} bag.`,
-    `Elegant ${color || 'classic'} ${mat} ${style} silhouette.`,
-    `A statement ${color || ''} ${mat} ${style} piece.`.replace(/\s+/g,' ')
-  ];
-  const middles = [
-    `Quality reviewed and ready for its next chapter.`,
-    `Hand-picked for Toni's. Clean lines and timeless appeal.`,
-    `Pre-loved with care, photographed exactly as it is.`
-  ];
-  const closers = [
-    `Tap Enquire to chat with Toni on WhatsApp.`,
-    `Drop-off in Nairobi CBD or arrange delivery.`,
-    `One-of-one. Once it's gone, it's gone.`
-  ];
-  return [
-    openers[Math.floor(Math.random() * openers.length)],
-    middles[Math.floor(Math.random() * middles.length)],
-    closers[Math.floor(Math.random() * closers.length)]
-  ].join(' ');
+function readFileAsStaged(file) {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase();
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => {
+      const dataUrl = reader.result;
+      resolve({ base64: dataUrl.split(',')[1], ext, dataUrl });
+    };
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
 }
 
-document.getElementById('saveBtn').addEventListener('click', saveBag);
-cancelBtn.addEventListener('click', resetForm);
+extraImagesInput?.addEventListener('change', async e => {
+  const files = [...e.target.files];
+  for (const f of files) {
+    if (stagedExtras.length >= 8) break;
+    try {
+      const staged = await readFileAsStaged(f);
+      stagedExtras.push(staged);
+    } catch (_) {}
+  }
+  renderExtraImagesPreview();
+  e.target.value = '';
+});
 
-async function saveBag() {
-  const name = nameInput.value.trim();
-  const price = parseInt(priceInput.value, 10);
-  const desc = descInput.value.trim();
-  const reel = reelInput.value.trim();
-  const sold = soldInput.checked;
-  const category = categoryInput.value || '';
-  const sizes = getSelectedSizes();
+function renderExtraImagesPreview() {
+  if (!extraImagesPreview) return;
+  if (!stagedExtras.length) { extraImagesPreview.innerHTML = ''; return; }
+  extraImagesPreview.innerHTML = stagedExtras.map((s, i) => `
+    <div class="extra-img-thumb">
+      <img src="${s.dataUrl || s.url}" alt="Additional image ${i + 1}">
+      <button class="extra-img-remove" data-extra-remove="${i}" aria-label="Remove" title="Remove">×</button>
+    </div>
+  `).join('');
+  extraImagesPreview.querySelectorAll('[data-extra-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const idx = parseInt(btn.dataset.extraRemove, 10);
+      stagedExtras.splice(idx, 1);
+      renderExtraImagesPreview();
+    });
+  });
+}
+
+// ====== STOCK READ/WRITE ======
+function getStockFromForm() {
+  const stock = {};
+  document.querySelectorAll('.stock-qty').forEach(inp => {
+    const size = inp.dataset.size;
+    const val = parseInt(inp.value, 10);
+    if (!isNaN(val) && val > 0) stock[size] = val;
+  });
+  return stock;
+}
+
+function setStockToForm(stock) {
+  document.querySelectorAll('.stock-qty').forEach(inp => {
+    const size = inp.dataset.size;
+    inp.value = stock && stock[size] > 0 ? stock[size] : '';
+  });
+}
+
+function clearStockForm() {
+  document.querySelectorAll('.stock-qty').forEach(inp => { inp.value = ''; });
+}
+
+// ====== AI DESCRIPTION ======
+document.getElementById('aiBtn').addEventListener('click', () => {
+  const name = document.getElementById('nameInput').value.trim();
+  const cat = document.getElementById('categoryInput').value;
+  if (!name) { showToast('Enter the item name first.'); return; }
+  document.getElementById('descInput').value = generateDescription(name, cat);
+});
+
+function generateDescription(name, cat) {
+  const lower = name.toLowerCase();
+  const colors = { black: 'sleek black', white: 'crisp white', navy: 'deep navy', grey: 'cool grey', gray: 'cool grey', blue: 'rich blue', brown: 'warm brown', khaki: 'classic khaki', beige: 'warm beige', cream: 'soft cream', olive: 'olive green', red: 'bold red' };
+  let color = '';
+  for (const c in colors) if (lower.includes(c)) { color = colors[c]; break; }
+
+  const catMap = {
+    Tshirts: 'tee', Shirts: 'shirt', Polos: 'polo', Jeans: 'jeans', Shorts: 'shorts',
+    'Long Sleeve Tees': 'long-sleeve tee', 'Sports Jerseys': 'jersey',
+    Jackets: 'jacket', 'Khakis/Plaid Pants': 'pants', Caps: 'cap',
+  };
+  const type = catMap[cat] || 'piece';
+
+  const openers = [
+    `Quality ${color || 'hand-picked'} ${type}. Checked over before listing, so what you see is what you get.`,
+    `A clean ${color || 'great-fit'} ${type} from Toni's. Ready to wear.`,
+    `${color ? color.charAt(0).toUpperCase() + color.slice(1) : 'Fresh'} ${type}, new in.`,
+  ];
+  const mids = [
+    `Quality reviewed, ready for its next wardrobe.`,
+    `Hand-picked. Photographed exactly as it is.`,
+    `One of one. Once it's gone, it's gone.`,
+  ];
+  const closes = [
+    `Tap Enquire to chat with Toni on WhatsApp.`,
+    `Pick up at Shop T03, Mithoo Business Centre, Moi Avenue, or arrange delivery.`,
+    `Available sizes listed. Tap Enquire to confirm and pay.`,
+  ];
+  return [openers[Math.floor(Math.random() * openers.length)], mids[Math.floor(Math.random() * mids.length)], closes[Math.floor(Math.random() * closes.length)]].join(' ');
+}
+
+// ====== SAVE ITEM ======
+document.getElementById('saveBtn').addEventListener('click', saveItem);
+document.getElementById('cancelBtn').addEventListener('click', resetForm);
+
+async function saveItem() {
+  const name = document.getElementById('nameInput').value.trim();
+  const price = parseInt(document.getElementById('priceInput').value, 10);
+  const desc = document.getElementById('descInput').value.trim();
+  const category = document.getElementById('categoryInput').value || '';
+  const reel = document.getElementById('reelInput')?.value.trim() || '';
+  const stock = getStockFromForm();
 
   if (!name) { showToast('Item name is required.'); return; }
   if (!price || price < 0) { showToast('Enter a valid price.'); return; }
@@ -181,10 +245,19 @@ async function saveBag() {
   setSaving(true);
   try {
     let imagePath = null;
-
     if (stagedImage) {
       showToast('Uploading image…');
       imagePath = await apiUploadImage(stagedImage.base64, stagedImage.ext);
+    }
+
+    let extraUrls = [];
+    if (stagedExtras.length) {
+      showToast(`Uploading ${stagedExtras.length} additional image${stagedExtras.length === 1 ? '' : 's'}…`);
+      for (const s of stagedExtras) {
+        if (s.url) { extraUrls.push(s.url); continue; }
+        const p = await apiUploadImage(s.base64, s.ext);
+        extraUrls.push(p);
+      }
     }
 
     if (editingId) {
@@ -192,27 +265,37 @@ async function saveBag() {
       if (!bag) return;
       bag.name = name;
       bag.category = category;
-      bag.sizes = sizes;
       bag.description = desc;
       bag.price = price;
-      bag.reel = reel;
-      bag.sold = sold;
+      if (reel) bag.reel = reel; else delete bag.reel;
+      bag.stock = { ...bag.stock, ...stock };
+      bag.images = extraUrls.length ? [imagePath || bag.image, ...extraUrls] : (imagePath ? [imagePath] : (bag.images || []));
+      if (bag.images.length) bag.images = bag.images.filter((u, i, a) => u && a.indexOf(u) === i);
+      document.querySelectorAll('.stock-qty').forEach(inp => {
+        const sz = inp.dataset.size;
+        const val = parseInt(inp.value, 10);
+        if (!isNaN(val) && val === 0) delete bag.stock[sz];
+        else if (inp.value === '') delete bag.stock[sz];
+      });
       if (imagePath) bag.image = imagePath;
       await apiPublish();
-      showToast('Item updated and live!');
+      showToast('Item updated and live.');
     } else {
       if (!stagedImage) { showToast('Add an item image.'); setSaving(false); return; }
-      const id = 'bag_' + Date.now();
-      bags.unshift({ id, name, category, sizes, description: desc, price, reel, sold, image: imagePath });
+      const id = 'item_' + Date.now();
+      const newBag = { id, name, category, description: desc, price, stock, sales: [], image: imagePath, createdAt: new Date().toISOString() };
+      if (extraUrls.length) newBag.images = [imagePath, ...extraUrls];
+      if (reel) newBag.reel = reel;
+      bags.unshift(newBag);
       await apiPublish();
-      showToast('Item added and live!');
+      showToast('Item added and live.');
     }
-
     resetForm();
     renderList();
     renderDashboard();
-  } catch(err) {
-    showToast('Sync failed: ' + err.message);
+    renderInventory();
+  } catch (err) {
+    showToast('Error: ' + err.message);
     console.error(err);
   } finally {
     setSaving(false);
@@ -221,187 +304,207 @@ async function saveBag() {
 
 function resetForm() {
   editingId = null;
-  editingIdField.value = '';
-  nameInput.value = '';
-  categoryInput.value = '';
-  clearSizes();
-  descInput.value = '';
-  priceInput.value = '';
-  reelInput.value = '';
-  soldInput.checked = false;
+  document.getElementById('editingId').value = '';
+  document.getElementById('nameInput').value = '';
+  document.getElementById('categoryInput').value = '';
+  document.getElementById('descInput').value = '';
+  document.getElementById('priceInput').value = '';
+  const reelEl = document.getElementById('reelInput');
+  if (reelEl) reelEl.value = '';
+  clearStockForm();
   imageInput.value = '';
   imagePreview.innerHTML = '';
   stagedImage = null;
-  formTitle.textContent = 'Add a new item';
-  cancelBtn.style.display = 'none';
+  stagedExtras = [];
+  renderExtraImagesPreview();
+  document.getElementById('formTitle').textContent = 'Add a new item';
+  document.getElementById('cancelBtn').style.display = 'none';
 }
 
-function editBag(id) {
+function editItem(id) {
   const bag = bags.find(b => b.id === id);
   if (!bag) return;
   editingId = id;
-  editingIdField.value = id;
-  nameInput.value = bag.name;
-  categoryInput.value = bag.category || '';
-  setSelectedSizes(bag.sizes || []);
-  descInput.value = bag.description || '';
-  priceInput.value = bag.price;
-  reelInput.value = bag.reel || '';
-  soldInput.checked = !!bag.sold;
+  document.getElementById('editingId').value = id;
+  document.getElementById('nameInput').value = bag.name;
+  document.getElementById('categoryInput').value = bag.category || '';
+  document.getElementById('descInput').value = bag.description || '';
+  document.getElementById('priceInput').value = bag.price;
+  const reelEl = document.getElementById('reelInput');
+  if (reelEl) reelEl.value = bag.reel || '';
+  setStockToForm(bag.stock || {});
   stagedImage = null;
-  imagePreview.innerHTML = `<img src="${bag.image}" style="max-width:200px;border-radius:8px;">`;
-  formTitle.textContent = 'Edit item';
-  cancelBtn.style.display = 'inline-block';
+  imagePreview.innerHTML = `<img src="${bag.image}" style="max-width:180px;border-radius:8px;">`;
+  stagedExtras = ((bag.images && bag.images.length > 1) ? bag.images.slice(1) : []).map(url => ({ url }));
+  renderExtraImagesPreview();
+  document.getElementById('formTitle').textContent = 'Edit item';
+  document.getElementById('cancelBtn').style.display = 'inline-block';
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
-async function deleteBag(id) {
-  if (!confirm('Delete this bag? This cannot be undone.')) return;
+async function deleteItem(id) {
+  if (!confirm('Delete this item? This cannot be undone.')) return;
   bags = bags.filter(b => b.id !== id);
   try {
     await apiPublish();
     renderList();
     renderDashboard();
-    showToast('Bag deleted and live.');
-  } catch(err) {
-    showToast('Sync failed: ' + err.message);
-  }
+    renderInventory();
+    showToast('Item deleted.');
+  } catch (err) { showToast('Error: ' + err.message); }
 }
 
-async function toggleSold(id) {
-  const bag = bags.find(b => b.id === id);
-  if (!bag) return;
-
-  // Unmarking sold - no buyer prompt
-  if (bag.sold) {
-    bag.sold = false;
-    delete bag.soldTo;
-    try {
-      await apiPublish();
-      renderList();
-    renderDashboard();
-      showToast('Marked as available.');
-    } catch(err) {
-      bag.sold = true;
-      showToast('Sync failed: ' + err.message);
-    }
-    return;
-  }
-
-  // Marking sold - open buyer capture modal
-  openBuyerModal(bag);
-}
-
-// ====== BUYER CAPTURE MODAL ======
-// Buyer details get forwarded to GHL through the Worker (/api/buyer) which
-// proxies to the public GHL form endpoint - bypasses CORS + browser reCAPTCHA.
-
-const buyerModal = document.getElementById('buyerModal');
+// ====== SALE MODAL ======
+const saleModal = document.getElementById('saleModal');
+const saleSizeInput = document.getElementById('saleSizeInput');
+const saleQtyInput = document.getElementById('saleQtyInput');
+const salePriceInput = document.getElementById('salePriceInput');
 const buyerName = document.getElementById('buyerName');
 const buyerPhone = document.getElementById('buyerPhone');
 const buyerNotes = document.getElementById('buyerNotes');
-let pendingBag = null;
 
-function openBuyerModal(bag) {
-  pendingBag = bag;
+function openSaleModal(id) {
+  const bag = bags.find(b => b.id === id);
+  if (!bag) return;
+  pendingSaleId = id;
+  document.getElementById('saleModalTitle').textContent = `Record sale: ${bag.name}`;
+  saleSizeInput.innerHTML = '';
+  const stock = bag.stock || {};
+  const hasSizes = Object.keys(stock).length > 0;
+  if (hasSizes) {
+    Object.entries(stock).filter(([, q]) => q > 0).forEach(([sz, q]) => {
+      const opt = document.createElement('option');
+      opt.value = sz;
+      opt.textContent = `${sz} (${q} in stock)`;
+      saleSizeInput.appendChild(opt);
+    });
+    if (!saleSizeInput.options.length) {
+      showToast('All sizes are out of stock.'); return;
+    }
+  } else {
+    const opt = document.createElement('option'); opt.value = 'One size'; opt.textContent = 'One size'; saleSizeInput.appendChild(opt);
+  }
+  saleQtyInput.value = 1;
+  salePriceInput.value = bag.price;
   buyerName.value = '';
   buyerPhone.value = '';
   buyerNotes.value = '';
-  document.getElementById('buyerModalTitle').textContent = `Mark as sold: ${bag.name}`;
-  buyerModal.style.display = 'flex';
+  saleModal.style.display = 'flex';
   buyerName.focus();
 }
 
-function closeBuyerModal() {
-  buyerModal.style.display = 'none';
-  pendingBag = null;
-}
+function closeSaleModal() { saleModal.style.display = 'none'; pendingSaleId = null; }
 
-async function commitSold(withBuyer) {
-  if (!pendingBag) return;
-  const bag = pendingBag;
-  bag.sold = true;
-  // Always record the sale timestamp - even on Skip - so the dashboard
-  // can bucket sales by today/week/month. Buyer name/phone stay optional.
-  const soldAt = new Date().toISOString();
-  if (withBuyer) {
-    const name = buyerName.value.trim();
-    const phone = buyerPhone.value.trim().replace(/[^0-9+]/g, '');
-    const notes = buyerNotes.value.trim();
-    if (!name && !phone) {
-      showToast('Add a name or phone, or hit Skip.');
-      return;
-    }
-    bag.soldTo = { name, phone, notes, soldAt };
-  } else {
-    bag.soldTo = { name: '', phone: '', notes: '', soldAt };
+document.getElementById('saleSaveBtn').addEventListener('click', async () => {
+  const bag = bags.find(b => b.id === pendingSaleId);
+  if (!bag) return;
+  const size = saleSizeInput.value;
+  const qty = parseInt(saleQtyInput.value, 10) || 1;
+  const salePrice = parseInt(salePriceInput.value, 10) || bag.price;
+
+  if (bag.stock && bag.stock[size] !== undefined) {
+    bag.stock[size] = Math.max(0, bag.stock[size] - qty);
   }
 
-  closeBuyerModal();
+  if (!bag.sales) bag.sales = [];
+  bag.sales.push({
+    size, qty, salePrice,
+    buyerName: buyerName.value.trim(),
+    buyerPhone: buyerPhone.value.trim(),
+    notes: buyerNotes.value.trim(),
+    soldAt: new Date().toISOString(),
+  });
+
+  closeSaleModal();
   try {
     await apiPublish();
     renderList();
     renderDashboard();
-    showToast(withBuyer ? 'SOLD. Buyer saved.' : 'Marked as SOLD.');
-    if (withBuyer) sendBuyerToGHL(bag);
-  } catch(err) {
-    bag.sold = false;
-    delete bag.soldTo;
-    showToast('Sync failed: ' + err.message);
-  }
+    renderInventory();
+    showToast(`Sale recorded: ${qty}× ${size}.`);
+    if (buyerName.value.trim() || buyerPhone.value.trim()) sendBuyerToGHL(bag, bag.sales[bag.sales.length - 1]);
+  } catch (err) { showToast('Error: ' + err.message); }
+});
+
+document.getElementById('saleCancelBtn').addEventListener('click', closeSaleModal);
+saleModal.addEventListener('click', e => { if (e.target === saleModal) closeSaleModal(); });
+
+// ====== RESTOCK MODAL ======
+const restockModal = document.getElementById('restockModal');
+const restockSizeInput = document.getElementById('restockSizeInput');
+const restockQtyInput = document.getElementById('restockQtyInput');
+
+function openRestockModal(id) {
+  const bag = bags.find(b => b.id === id);
+  if (!bag) return;
+  pendingRestockId = id;
+  document.getElementById('restockModalTitle').textContent = `Restock: ${bag.name}`;
+  restockSizeInput.innerHTML = '';
+  const ALL_SIZES = ['One Size','XS','S','M','L','XL','XXL','3XL','28','30','32','34','36','38','40'];
+  ALL_SIZES.forEach(sz => {
+    const opt = document.createElement('option'); opt.value = sz;
+    const cur = bag.stock?.[sz] || 0;
+    opt.textContent = `${sz} (currently ${cur})`;
+    restockSizeInput.appendChild(opt);
+  });
+  restockQtyInput.value = 1;
+  restockModal.style.display = 'flex';
 }
 
-const GHL_RECAPTCHA_KEY = '6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX';
+function closeRestockModal() { restockModal.style.display = 'none'; pendingRestockId = null; }
 
+document.getElementById('restockSaveBtn').addEventListener('click', async () => {
+  const bag = bags.find(b => b.id === pendingRestockId);
+  if (!bag) return;
+  const size = restockSizeInput.value;
+  const qty = parseInt(restockQtyInput.value, 10) || 0;
+  if (qty <= 0) { showToast('Enter a quantity to add.'); return; }
+  if (!bag.stock) bag.stock = {};
+  bag.stock[size] = (bag.stock[size] || 0) + qty;
+  closeRestockModal();
+  try {
+    await apiPublish();
+    renderList();
+    renderInventory();
+    showToast(`+${qty} ${size} added to stock.`);
+  } catch (err) { showToast('Error: ' + err.message); }
+});
+
+document.getElementById('restockCancelBtn').addEventListener('click', closeRestockModal);
+restockModal.addEventListener('click', e => { if (e.target === restockModal) closeRestockModal(); });
+
+// ====== GHL INTEGRATION ======
+const GHL_RECAPTCHA_KEY = '6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX';
 async function getCaptchaToken() {
   if (!window.grecaptcha?.enterprise) return '';
   return new Promise(resolve => {
     grecaptcha.enterprise.ready(async () => {
-      try {
-        const token = await grecaptcha.enterprise.execute(GHL_RECAPTCHA_KEY, { action: 'submit' });
-        resolve(token);
-      } catch(e) { resolve(''); }
+      try { resolve(await grecaptcha.enterprise.execute(GHL_RECAPTCHA_KEY, { action: 'submit' })); }
+      catch (e) { resolve(''); }
     });
   });
 }
-
-async function sendBuyerToGHL(bag) {
+async function sendBuyerToGHL(bag, sale) {
   try {
     const captchaV3 = await getCaptchaToken();
-    const r = await fetch(`${API_BASE}/api/buyer`, {
+    await fetch(`${API_BASE}/api/buyer`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
-        name: bag.soldTo.name,
-        phone: bag.soldTo.phone,
-        notes: bag.soldTo.notes,
-        bag_name: bag.name,
-        bag_price: bag.price,
+        name: sale.buyerName, phone: sale.buyerPhone,
+        notes: sale.notes,
+        bag_name: `${bag.name} (${sale.size})`,
+        bag_price: sale.salePrice || bag.price,
         captchaV3,
       }),
     });
-    const result = await r.json().catch(() => ({}));
-    console.log('GHL submit:', result);
-  } catch(err) {
-    console.warn('GHL submit failed (non-blocking):', err);
-  }
+  } catch (err) { console.warn('GHL submit failed:', err); }
 }
-
-document.getElementById('buyerSaveBtn').addEventListener('click', () => commitSold(true));
-document.getElementById('buyerSkipBtn').addEventListener('click', () => commitSold(false));
-document.getElementById('buyerCancelBtn').addEventListener('click', closeBuyerModal);
-buyerModal.addEventListener('click', e => { if (e.target === buyerModal) closeBuyerModal(); });
 
 // ====== DASHBOARD ======
 function startOfDay(d) { const x = new Date(d); x.setHours(0,0,0,0); return x; }
-function startOfWeek(d) {
-  const x = startOfDay(d);
-  const dow = (x.getDay() + 6) % 7; // Mon = 0
-  x.setDate(x.getDate() - dow);
-  return x;
-}
+function startOfWeek(d) { const x = startOfDay(d); const dow = (x.getDay() + 6) % 7; x.setDate(x.getDate() - dow); return x; }
 function startOfMonth(d) { const x = new Date(d.getFullYear(), d.getMonth(), 1); x.setHours(0,0,0,0); return x; }
-function fmtKsh(n) { return 'Ksh ' + Number(n || 0).toLocaleString('en-KE'); }
 function relTime(iso) {
   const sec = (Date.now() - new Date(iso).getTime()) / 1000;
   if (sec < 60) return 'just now';
@@ -415,110 +518,485 @@ function relTime(iso) {
 
 function renderDashboard() {
   const now = new Date();
-  const today0 = startOfDay(now);
-  const week0 = startOfWeek(now);
-  const month0 = startOfMonth(now);
-
-  const sold = bags.filter(b => b.sold && b.soldTo?.soldAt);
   const buckets = [
-    { label: 'Today',     since: today0 },
-    { label: 'This week', since: week0  },
-    { label: 'This month',since: month0 },
-    { label: 'All time',  since: null   },
+    { label: 'Today',      since: startOfDay(now) },
+    { label: 'This week',  since: startOfWeek(now) },
+    { label: 'This month', since: startOfMonth(now) },
+    { label: 'All time',   since: null },
   ].map(b => {
-    const items = b.since ? sold.filter(s => new Date(s.soldTo.soldAt) >= b.since) : sold;
-    const count = items.length;
-    const revenue = items.reduce((sum, s) => sum + Number(s.price || 0), 0);
+    let count = 0, revenue = 0;
+    bags.forEach(bag => {
+      (bag.sales || []).forEach(s => {
+        if (!b.since || new Date(s.soldAt) >= b.since) {
+          count += Number(s.qty) || 1;
+          revenue += (Number(s.salePrice || bag.price)) * (Number(s.qty) || 1);
+        }
+      });
+    });
     return { ...b, count, revenue };
   });
 
   document.getElementById('kpiGrid').innerHTML = buckets.map(b => `
     <div class="kpi-card">
       <div class="kpi-label">${b.label}</div>
-      <div class="kpi-count">${b.count} <span class="kpi-unit">sold</span></div>
+      <div class="kpi-count">${b.count} <span class="kpi-unit">units</span></div>
       <div class="kpi-revenue">${fmtKsh(b.revenue)}</div>
-    </div>
-  `).join('');
+    </div>`).join('');
 
-  // Top categories (by sold count, all-time)
-  const catCount = {};
-  const catRevenue = {};
-  for (const s of sold) {
-    const c = s.category || 'Other';
-    catCount[c] = (catCount[c] || 0) + 1;
-    catRevenue[c] = (catRevenue[c] || 0) + Number(s.price || 0);
-  }
-  const cats = Object.entries(catCount).sort((a,b) => b[1] - a[1]).slice(0, 6);
-  const maxCount = cats[0]?.[1] || 1;
+  const catUnits = {}, catRev = {};
+  bags.forEach(bag => {
+    const cat = bag.category || 'Other';
+    (bag.sales || []).forEach(s => {
+      catUnits[cat] = (catUnits[cat] || 0) + (Number(s.qty) || 1);
+      catRev[cat] = (catRev[cat] || 0) + (Number(s.salePrice || bag.price)) * (Number(s.qty) || 1);
+    });
+  });
+  const cats = Object.entries(catUnits).sort((a, b) => b[1] - a[1]).slice(0, 6);
+  const maxU = cats[0]?.[1] || 1;
   document.getElementById('topCats').innerHTML = cats.length
     ? cats.map(([cat, n]) => `
         <div class="cat-bar">
-          <div class="cat-bar-row">
-            <span class="cat-bar-name">${escapeHtml(cat)}</span>
-            <span class="cat-bar-meta">${n} sold · ${fmtKsh(catRevenue[cat])}</span>
-          </div>
-          <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${(n/maxCount)*100}%"></div></div>
+          <div class="cat-bar-row"><span class="cat-bar-name">${escapeHtml(cat)}</span><span class="cat-bar-meta">${n} sold · ${fmtKsh(catRev[cat])}</span></div>
+          <div class="cat-bar-track"><div class="cat-bar-fill" style="width:${(n/maxU)*100}%"></div></div>
         </div>`).join('')
-    : '<p style="color:#999;font-size:13px;">No sales yet. Mark items sold to populate.</p>';
+    : '<p style="color:#999;font-size:13px;">No sales yet. Record your first sale to populate.</p>';
 
-  // Recent sales (last 6)
-  const recent = [...sold]
-    .sort((a,b) => new Date(b.soldTo.soldAt) - new Date(a.soldTo.soldAt))
-    .slice(0, 6);
+  const allSaleRecords = [];
+  bags.forEach(bag => (bag.sales || []).forEach(s => allSaleRecords.push({ bag, s })));
+  const recent = allSaleRecords.sort((a, b) => new Date(b.s.soldAt) - new Date(a.s.soldAt)).slice(0, 6);
   document.getElementById('recentSales').innerHTML = recent.length
-    ? recent.map(s => `
+    ? recent.map(({ bag, s }) => `
         <div class="recent-row">
-          <img src="${s.image}" alt="${escapeHtml(s.name)}">
-          <div class="recent-body">
-            <div class="recent-name">${escapeHtml(s.name)}</div>
-            <div class="recent-meta">${fmtKsh(s.price)} · ${escapeHtml(s.soldTo.name || 'Unknown buyer')} · ${relTime(s.soldTo.soldAt)}</div>
+          <img src="${bag.image}" alt="${escapeHtml(bag.name)}">
+          <div>
+            <div class="recent-name">${escapeHtml(bag.name)} · ${escapeHtml(s.size || '')} × ${s.qty || 1}</div>
+            <div class="recent-meta">${fmtKsh(s.salePrice || bag.price)} · ${s.buyerName ? escapeHtml(s.buyerName) : 'No buyer saved'} · ${relTime(s.soldAt)}</div>
           </div>
         </div>`).join('')
     : '<p style="color:#999;font-size:13px;">No sales recorded yet.</p>';
 }
 
-// ====== LIST ======
+// ====== INVENTORY ======
+let invFilter = 'attention';
+let invShowAll = false;
+const INV_PAGE_SIZE = 15;
+
+function renderInventory() {
+  let totalItems = bags.length;
+  let totalUnits = 0, totalValue = 0, lowStock = 0, outOfStock = 0;
+
+  bags.forEach(bag => {
+    const units = totalStock(bag);
+    totalUnits += units;
+    totalValue += units * (bag.price || 0);
+    if (units === 0) outOfStock++;
+    else if (units <= 5) lowStock++;
+  });
+
+  document.getElementById('invKpiGrid').innerHTML = [
+    { label: 'Total items', val: totalItems, sub: 'SKUs listed', cls: '' },
+    { label: 'Units in stock', val: totalUnits.toLocaleString(), sub: 'across all sizes', cls: 'success' },
+    { label: 'Inventory value', val: fmtKsh(totalValue), sub: 'at listed prices', cls: '' },
+    { label: 'Low stock', val: lowStock, sub: 'up to 5 units left', cls: lowStock > 0 ? 'warn' : '' },
+    { label: 'Out of stock', val: outOfStock, sub: 'need restocking', cls: outOfStock > 0 ? 'danger' : '' },
+  ].map(k => `
+    <div class="inv-kpi ${k.cls}">
+      <div class="inv-kpi-label">${k.label}</div>
+      <div class="inv-kpi-val">${k.val}</div>
+      <div class="inv-kpi-sub">${k.sub}</div>
+    </div>`).join('');
+
+  const attentionBags = bags.filter(b => totalStock(b) <= 5);
+  const filterBar = document.getElementById('invFilterBar');
+  if (filterBar) {
+    filterBar.innerHTML = `
+      <button class="pill ${invFilter==='attention'?'active':''}" data-inv-filter="attention">
+        Needs attention <span class="admin-nav-count">${attentionBags.length}</span>
+      </button>
+      <button class="pill ${invFilter==='all'?'active':''}" data-inv-filter="all">
+        All items <span class="admin-nav-count">${bags.length}</span>
+      </button>
+    `;
+    filterBar.querySelectorAll('[data-inv-filter]').forEach(b => {
+      b.addEventListener('click', () => {
+        invFilter = b.dataset.invFilter;
+        invShowAll = false;
+        renderInventory();
+      });
+    });
+  }
+
+  const filtered = (invFilter === 'attention' ? attentionBags : bags)
+    .slice()
+    .sort((a, b) => totalStock(a) - totalStock(b));
+
+  const cap = invShowAll ? filtered.length : Math.min(INV_PAGE_SIZE, filtered.length);
+  const sorted = filtered.slice(0, cap);
+
+  const lbl = document.getElementById('invSortLabel');
+  if (lbl) lbl.textContent = `showing ${sorted.length} of ${filtered.length}, sorted low to high`;
+
+  document.getElementById('invTableBody').innerHTML = sorted.map(bag => {
+    const units = totalStock(bag);
+    const soldUnits = totalUnitsSold(bag);
+    const stockEntries = Object.entries(bag.stock || {});
+    const stockCells = stockEntries.length
+      ? stockEntries.map(([sz, q]) => {
+          const cls = q === 0 ? 'zero' : q <= 3 ? 'low' : 'ok';
+          return `<span class="stock-cell ${cls}">${escapeHtml(sz)}: ${q}</span>`;
+        }).join('')
+      : '<span style="color:#999;font-size:12px;">No sizes set</span>';
+
+    const statusCls = units === 0 ? 'zero' : units <= 5 ? 'low' : 'ok';
+    const statusLabel = units === 0 ? 'Out of stock' : units <= 5 ? 'Low stock' : 'In stock';
+
+    return `
+    <tr>
+      <td><img class="item-img" src="${bag.image}" alt="${escapeHtml(bag.name)}"></td>
+      <td>
+        <div style="font-weight:600;font-size:13px;">${escapeHtml(bag.name)}</div>
+        <div style="font-size:11px;color:#999;margin-top:2px;">${soldUnits} sold, ${fmtKsh(totalRevenue(bag))} revenue</div>
+      </td>
+      <td style="font-size:13px;">${escapeHtml(bag.category || '-')}</td>
+      <td style="font-size:13px;font-weight:600;">${fmtKsh(bag.price)}</td>
+      <td><div class="stock-cells">${stockCells}</div></td>
+      <td style="font-weight:700;font-size:14px;">${units}</td>
+      <td><span class="stock-pill ${statusCls}">${statusLabel}</span></td>
+      <td>
+        <button class="restock-btn" onclick="openRestockModal('${bag.id}')">+ Restock</button>
+      </td>
+    </tr>`;
+  }).join('') || `<tr><td colspan="8" style="text-align:center;padding:24px;color:var(--ink-faint);">${invFilter === 'attention' ? '🎉 Nothing needs attention. All items have healthy stock.' : 'No items yet.'}</td></tr>`;
+
+  const toggle = document.getElementById('invShowMore');
+  if (toggle) {
+    if (filtered.length <= INV_PAGE_SIZE) {
+      toggle.style.display = 'none';
+    } else {
+      toggle.style.display = 'block';
+      toggle.textContent = invShowAll ? `Show fewer (top ${INV_PAGE_SIZE})` : `Show all ${filtered.length} items ↓`;
+      toggle.onclick = () => { invShowAll = !invShowAll; renderInventory(); };
+    }
+  }
+}
+
+// ====== ITEM LIST ======
+let bulkSelected = new Set();
+
 function renderList() {
   const list = document.getElementById('adminList');
   document.getElementById('bagCount').textContent = bags.length;
-  list.innerHTML = bags.map(b => {
-    const buyer = b.soldTo
-      ? `<div style="font-size:12px;color:#666;margin-top:4px;">Sold to ${escapeHtml(b.soldTo.name || 'unknown')}${b.soldTo.phone ? ' · ' + escapeHtml(b.soldTo.phone) : ''}</div>`
-      : '';
-    const meta = [
-      b.category ? `<span style="background:#f0ede8;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">${escapeHtml(b.category)}</span>` : '',
-      b.sizes && b.sizes.length ? `<span style="font-size:12px;color:#666;">Sizes: ${escapeHtml(b.sizes.join(', '))}</span>` : '',
-    ].filter(Boolean).join(' ');
+  const navCount = document.getElementById('navItemCount');
+  if (navCount) navCount.textContent = bags.length;
+  renderBulkBar();
+  list.innerHTML = bags.map(bag => {
+    const units = totalStock(bag);
+    const sold = totalUnitsSold(bag);
+    const stockSummary = Object.entries(bag.stock || {}).map(([sz, q]) => `${sz}:${q}`).join(' · ') || 'No stock set';
+    const checked = bulkSelected.has(bag.id);
     return `
-    <div class="admin-card">
-      <img src="${b.image}" alt="${escapeHtml(b.name)}">
+    <div class="admin-card ${checked ? 'bulk-selected' : ''}">
+      <label class="bulk-check" title="Select for bulk actions">
+        <input type="checkbox" data-bulk="${escapeHtml(bag.id)}" ${checked ? 'checked' : ''}>
+      </label>
+      <img src="${bag.image}" alt="${escapeHtml(bag.name)}">
       <div class="admin-card-body">
-        <div class="admin-card-name">${escapeHtml(b.name)}</div>
-        ${meta ? `<div style="margin:4px 0;display:flex;align-items:center;gap:8px;flex-wrap:wrap;">${meta}</div>` : ''}
-        <div class="admin-card-price">Ksh ${Number(b.price).toLocaleString('en-KE')} ${b.sold ? '· <span style="color:#b00020">SOLD</span>' : ''}</div>
-        ${buyer}
+        <div class="admin-card-name">${escapeHtml(bag.name)}</div>
+        ${bag.category ? `<div style="margin:3px 0;"><span style="background:#f0ede8;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">${escapeHtml(bag.category)}</span></div>` : ''}
+        <div class="admin-card-price">${fmtKsh(bag.price)}</div>
+        <div class="admin-card-stock">${units} in stock · ${sold} sold | ${stockSummary}</div>
         <div class="admin-card-actions">
-          <button onclick="editBag('${b.id}')">Edit</button>
-          <button class="sold-toggle ${b.sold ? 'on' : ''}" onclick="toggleSold('${b.id}')">${b.sold ? 'Unmark sold' : 'Mark sold'}</button>
-          <button class="danger" onclick="deleteBag('${b.id}')">Delete</button>
+          <button onclick="editItem('${bag.id}')">Edit</button>
+          <button onclick="openSaleModal('${bag.id}')" style="background:#f0faf4;border-color:#b0d8c0;color:#1a7a40;">Record sale</button>
+          <button onclick="openRestockModal('${bag.id}')">Restock</button>
+          <button class="danger" onclick="deleteItem('${bag.id}')">Delete</button>
         </div>
       </div>
+    </div>`;
+  }).join('');
+
+  list.querySelectorAll('input[data-bulk]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      if (cb.checked) bulkSelected.add(cb.dataset.bulk);
+      else bulkSelected.delete(cb.dataset.bulk);
+      cb.closest('.admin-card').classList.toggle('bulk-selected', cb.checked);
+      renderBulkBar();
+    });
+  });
+}
+
+function renderBulkBar() {
+  const bar = document.getElementById('bulkActions');
+  if (!bar) return;
+  if (bulkSelected.size === 0) { bar.style.display = 'none'; return; }
+  bar.style.display = 'flex';
+  document.getElementById('bulkCount').textContent = bulkSelected.size;
+}
+
+function bulkClear() { bulkSelected.clear(); renderList(); }
+function bulkSelectAll() { bags.forEach(b => bulkSelected.add(b.id)); renderList(); }
+
+async function bulkDelete() {
+  if (!confirm(`Delete ${bulkSelected.size} item(s)? This cannot be undone.`)) return;
+  bags = bags.filter(b => !bulkSelected.has(b.id));
+  bulkSelected.clear();
+  try {
+    await apiPublish();
+    renderList(); renderInventory(); renderDashboard();
+    showToast(`Deleted.`);
+  } catch (err) { showToast('Sync failed: ' + err.message); }
+}
+
+async function bulkSetCategory() {
+  const cat = prompt('Set category for selected items to:\n(use exact name e.g. Polos, Shirts, Jeans, Caps)');
+  if (!cat) return;
+  bags.forEach(b => { if (bulkSelected.has(b.id)) b.category = cat; });
+  try {
+    await apiPublish();
+    renderList(); renderInventory();
+    showToast(`Set ${bulkSelected.size} item(s) to "${cat}".`);
+    bulkSelected.clear();
+    renderList();
+  } catch (err) { showToast('Sync failed: ' + err.message); }
+}
+
+window.editItem = editItem;
+window.deleteItem = deleteItem;
+window.openSaleModal = openSaleModal;
+window.openRestockModal = openRestockModal;
+window.bulkClear = bulkClear;
+window.bulkSelectAll = bulkSelectAll;
+window.bulkDelete = bulkDelete;
+window.bulkSetCategory = bulkSetCategory;
+
+// ====== WHATSAPP BROADCAST ======
+let broadcastSelectedIds = [];
+let broadcastRecipientsState = {};
+
+function pastBuyers() {
+  const map = new Map();
+  for (const bag of bags) {
+    for (const s of (bag.sales || [])) {
+      if (!s.buyerPhone) continue;
+      const phone = String(s.buyerPhone).replace(/[^0-9]/g, '');
+      if (phone.length < 9) continue;
+      const existing = map.get(phone);
+      const soldAt = new Date(s.soldAt || 0).getTime();
+      if (!existing || soldAt > existing.soldAt) {
+        map.set(phone, { phone, name: s.buyerName || '', soldAt, lastBought: bag.name });
+      }
+    }
+  }
+  return [...map.values()].sort((a, b) => b.soldAt - a.soldAt);
+}
+
+function renderBroadcastSelected() {
+  const wrap = document.getElementById('broadcastSelectedItems');
+  if (!wrap) return;
+  if (!broadcastSelectedIds.length) { wrap.innerHTML = '<p style="color:var(--ink-faint);font-size:13px;margin:6px 0;">No items selected, message will be text-only.</p>'; return; }
+  wrap.innerHTML = broadcastSelectedIds.map(id => {
+    const b = bags.find(x => x.id === id);
+    if (!b) return '';
+    return `<div class="set-chip"><img src="${b.image}" alt=""><span>${escapeHtml(b.name)}</span><button data-bc-remove="${escapeHtml(id)}" aria-label="Remove">×</button></div>`;
+  }).join('');
+  wrap.querySelectorAll('[data-bc-remove]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      broadcastSelectedIds = broadcastSelectedIds.filter(id => id !== btn.dataset.bcRemove);
+      renderBroadcastSelected();
+      renderBroadcastPicker();
+      renderBroadcastPreview();
+    });
+  });
+}
+
+function renderBroadcastPicker() {
+  const picker = document.getElementById('broadcastItemPicker');
+  if (!picker) return;
+  const q = (document.getElementById('broadcastItemSearch')?.value || '').toLowerCase().trim();
+  const matches = bags
+    .filter(b => !broadcastSelectedIds.includes(b.id))
+    .filter(b => !q || `${b.name} ${b.category || ''}`.toLowerCase().includes(q))
+    .slice(0, 40);
+  picker.innerHTML = matches.length
+    ? matches.map(b => `
+        <button class="set-pick" data-bc-add="${escapeHtml(b.id)}" type="button">
+          <img src="${b.image}" alt="">
+          <div class="set-pick-body">
+            <div class="set-pick-name">${escapeHtml(b.name)}</div>
+            <div class="set-pick-meta">${escapeHtml(b.category || '')}${b.price > 0 ? ' · ' + fmtKsh(b.price) : ''}</div>
+          </div>
+        </button>`).join('')
+    : '<p style="color:var(--ink-faint);font-size:13px;padding:8px 0;">No matches.</p>';
+  picker.querySelectorAll('[data-bc-add]').forEach(b => {
+    b.addEventListener('click', () => {
+      broadcastSelectedIds.push(b.dataset.bcAdd);
+      renderBroadcastSelected();
+      renderBroadcastPicker();
+      renderBroadcastPreview();
+    });
+  });
+}
+
+function renderBroadcastRecipients() {
+  const wrap = document.getElementById('broadcastRecipients');
+  if (!wrap) return;
+  const buyers = pastBuyers();
+  for (const b of buyers) {
+    if (!(b.phone in broadcastRecipientsState)) {
+      broadcastRecipientsState[b.phone] = { name: b.name, included: true };
+    }
+  }
+  if (!buyers.length) {
+    wrap.innerHTML = '<p style="color:var(--ink-faint);font-size:13px;padding:8px 0;">No past buyers yet. Once you record sales with buyer phones, they\'ll show up here.</p>';
+    return;
+  }
+  wrap.innerHTML = `
+    <div style="display:flex;gap:8px;margin-bottom:8px;">
+      <button class="btn-admin" type="button" data-bc-recip="all" style="padding:4px 10px;font-size:11px;">Select all</button>
+      <button class="btn-admin" type="button" data-bc-recip="none" style="padding:4px 10px;font-size:11px;">Deselect all</button>
+      <span style="font-size:12px;color:var(--ink-faint);margin-left:auto;align-self:center;" id="broadcastSelectedCount"></span>
     </div>
-  `;}).join('');
+    ${buyers.map(b => {
+      const st = broadcastRecipientsState[b.phone];
+      return `
+        <label class="broadcast-recipient${st.included ? ' on' : ''}">
+          <input type="checkbox" data-bc-toggle="${b.phone}" ${st.included ? 'checked' : ''}>
+          <span class="broadcast-recipient-name">${escapeHtml(b.name || 'Unknown buyer')}</span>
+          <span class="broadcast-recipient-phone">+${b.phone}</span>
+          <span class="broadcast-recipient-meta">last: ${escapeHtml(b.lastBought)}</span>
+        </label>`;
+    }).join('')}
+  `;
+  wrap.querySelectorAll('[data-bc-toggle]').forEach(cb => {
+    cb.addEventListener('change', () => {
+      broadcastRecipientsState[cb.dataset.bcToggle].included = cb.checked;
+      cb.closest('.broadcast-recipient').classList.toggle('on', cb.checked);
+      updateBroadcastCount();
+    });
+  });
+  wrap.querySelectorAll('[data-bc-recip]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const on = btn.dataset.bcRecip === 'all';
+      buyers.forEach(b => { broadcastRecipientsState[b.phone].included = on; });
+      renderBroadcastRecipients();
+    });
+  });
+  updateBroadcastCount();
 }
 
-function escapeHtml(s) {
-  return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+function updateBroadcastCount() {
+  const el = document.getElementById('broadcastSelectedCount');
+  if (!el) return;
+  const n = Object.values(broadcastRecipientsState).filter(s => s.included).length;
+  el.textContent = `${n} selected`;
 }
 
-window.editBag = editBag;
-window.deleteBag = deleteBag;
-window.toggleSold = toggleSold;
+function buildBroadcastMessage(recipientName) {
+  const subject = (document.getElementById('broadcastSubject')?.value || '').trim();
+  const items = broadcastSelectedIds.map(id => bags.find(b => b.id === id)).filter(Boolean);
+  const itemsBlock = items.length
+    ? '\n\n' + items.map((b, i) => `${i + 1}. *${b.name}*${b.price > 0 ? ' - ' + fmtKsh(b.price) : ''}`).join('\n')
+    : '';
+  const greet = recipientName ? `Hi ${recipientName.split(' ')[0]}! ` : 'Hi! ';
+  return `${greet}It's Toni's Jeans & Tees. ${subject || 'Fresh stock just landed.'}${itemsBlock}\n\nTap to browse: ${SITE_URL}\n\nReply here to enquire.`;
+}
+
+function renderBroadcastPreview() {
+  const preview = document.getElementById('broadcastPreview');
+  if (!preview) return;
+  preview.value = buildBroadcastMessage('{First name}');
+}
+
+document.getElementById('broadcastSubject')?.addEventListener('input', renderBroadcastPreview);
+document.getElementById('broadcastItemSearch')?.addEventListener('input', renderBroadcastPicker);
+
+document.getElementById('broadcastCopyBtn')?.addEventListener('click', () => {
+  navigator.clipboard.writeText(buildBroadcastMessage(''));
+  showToast('Message copied. Paste it into WhatsApp broadcast.');
+});
+
+document.getElementById('broadcastStartBtn')?.addEventListener('click', () => {
+  const recipients = pastBuyers().filter(b => broadcastRecipientsState[b.phone]?.included);
+  if (!recipients.length) { showToast('Pick at least one recipient.'); return; }
+  if (!confirm(`Open ${recipients.length} WhatsApp window${recipients.length === 1 ? '' : 's'}, one per buyer. Send each one manually. OK?`)) return;
+  let i = 0;
+  function next() {
+    if (i >= recipients.length) {
+      document.getElementById('broadcastStatus').textContent = `Opened ${recipients.length} WhatsApp window${recipients.length === 1 ? '' : 's'}.`;
+      return;
+    }
+    const r = recipients[i++];
+    const msg = buildBroadcastMessage(r.name);
+    window.open(`https://wa.me/${r.phone}?text=${encodeURIComponent(msg)}`, '_blank');
+    document.getElementById('broadcastStatus').textContent = `Opening ${i} of ${recipients.length}…`;
+    setTimeout(next, 700);
+  }
+  next();
+});
+
+// ====== ANALYTICS ======
+const ANALYTICS_KEY = 'toni_analytics';
+function loadAnalytics() {
+  try { return JSON.parse(localStorage.getItem(ANALYTICS_KEY) || '{}'); }
+  catch { return {}; }
+}
+function renderAnalytics() {
+  const stats = loadAnalytics();
+  const grid = document.getElementById('analyticsKpiGrid');
+  if (!grid) return;
+
+  const totalViews = Object.values(stats.itemViews || {}).reduce((a, b) => a + b, 0);
+  const totalEnquiries = Object.values(stats.itemEnquiries || {}).reduce((a, b) => a + b, 0);
+  const totalWishlist = Object.values(stats.itemWishlist || {}).reduce((a, b) => a + b, 0);
+  const totalIgClicks = Object.values(stats.itemIgClicks || {}).reduce((a, b) => a + b, 0);
+
+  grid.innerHTML = [
+    { label: 'Item views', val: totalViews.toLocaleString(), sub: 'lightbox opens', cls: '' },
+    { label: 'Enquiries', val: totalEnquiries.toLocaleString(), sub: 'WhatsApp clicks', cls: 'success' },
+    { label: 'Saved by buyers', val: totalWishlist.toLocaleString(), sub: 'wishlist hearts', cls: '' },
+    { label: 'IG clicks', val: totalIgClicks.toLocaleString(), sub: 'View on IG taps', cls: '' },
+  ].map(k => `
+    <div class="inv-kpi ${k.cls}">
+      <div class="inv-kpi-label">${k.label}</div>
+      <div class="inv-kpi-val">${k.val}</div>
+      <div class="inv-kpi-sub">${k.sub}</div>
+    </div>`).join('');
+
+  function topN(map = {}, n = 6) {
+    return Object.entries(map)
+      .map(([id, count]) => ({ id, count, bag: bags.find(b => b.id === id) }))
+      .filter(x => x.bag)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, n);
+  }
+
+  function renderTopList(list, emptyMsg) {
+    if (!list.length) return `<p style="color:#999;font-size:13px;">${emptyMsg}</p>`;
+    return list.map(x => `
+      <div class="recent-row">
+        <img src="${x.bag.image}" alt="${escapeHtml(x.bag.name)}">
+        <div>
+          <div class="recent-name">${escapeHtml(x.bag.name)}</div>
+          <div class="recent-meta">${x.count} ${x.count === 1 ? 'time' : 'times'} · ${escapeHtml(x.bag.category || '')}</div>
+        </div>
+      </div>`).join('');
+  }
+
+  document.getElementById('analyticsTopViews').innerHTML = renderTopList(topN(stats.itemViews), 'No views yet.');
+  document.getElementById('analyticsTopEnquiries').innerHTML = renderTopList(topN(stats.itemEnquiries), 'No enquiries yet.');
+}
 
 async function init() {
-  showToast('Loading bags…');
+  showToast('Loading…');
   await loadData();
   renderList();
+  renderDashboard();
+  renderInventory();
+  renderBroadcastSelected();
+  renderBroadcastPicker();
+  renderBroadcastRecipients();
+  renderBroadcastPreview();
+  renderAnalytics();
 }
 
 checkAuth();

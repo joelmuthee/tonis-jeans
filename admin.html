@@ -6,22 +6,21 @@
 <title>Toni's Jeans & Tees · Admin</title>
 <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png">
 <link rel="apple-touch-icon" sizes="180x180" href="images/apple-touch-icon.png">
-<meta name="theme-color" content="#0d0d0d">
+<meta name="theme-color" content="#1a1410">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=13">
-<!-- GHL form submit captcha (enterprise reCAPTCHA v3) -->
+<link rel="stylesheet" href="styles.css?v=14">
 <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX" async defer></script>
 </head>
-<body style="background:#faf7f2;">
+<body style="background:#fff8ec;">
 
 <!-- LOGIN -->
 <div id="loginScreen" class="login-wrap">
-  <h1>Owner Login</h1>
+  <h1>Toni's Admin</h1>
   <p>Enter your admin password</p>
   <div class="field">
     <label>Password</label>
-    <input id="loginPassword" type="password" autocomplete="current-password" />
+    <input id="loginPassword" type="password" autocomplete="current-password">
   </div>
   <button class="btn-admin primary" id="loginBtn" style="width:100%">Sign in</button>
   <p id="loginError" style="color:#b00020;font-size:13px;text-align:center;margin-top:12px;display:none;">Wrong password</p>
@@ -38,6 +37,15 @@
     </div>
   </div>
 
+  <nav class="admin-nav" id="adminNav">
+    <a href="#addForm" class="admin-nav-cta">+ Add new item</a>
+    <a href="#salesDash">Sales</a>
+    <a href="#invDash">Inventory</a>
+    <a href="#broadcastDash">WhatsApp Marketing</a>
+    <a href="#analyticsDash">Analytics</a>
+    <a href="#allItems">All items <span class="admin-nav-count" id="navItemCount"></span></a>
+  </nav>
+
   <section class="dash" id="salesDash">
     <h2 class="dash-title">Sales Overview</h2>
     <div class="kpi-grid" id="kpiGrid"></div>
@@ -53,67 +61,123 @@
     </div>
   </section>
 
-  <div class="admin-form">
+  <section class="dash" id="invDash">
+    <h2 class="dash-title">Inventory Overview</h2>
+    <div class="inv-kpi-grid" id="invKpiGrid"></div>
+    <div class="section-divider">Stock levels <span id="invSortLabel">sorted low to high</span></div>
+    <div class="inv-filter-bar filter-pills" id="invFilterBar"></div>
+    <div class="inv-table-wrap">
+      <table class="inv-table" id="invTable">
+        <thead>
+          <tr>
+            <th style="width:50px"></th>
+            <th>Item</th>
+            <th>Category</th>
+            <th>Price</th>
+            <th>Stock by size</th>
+            <th>Total</th>
+            <th>Status</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="invTableBody"></tbody>
+      </table>
+    </div>
+    <button class="btn-admin" id="invShowMore" style="display:none;width:100%;margin-top:14px;"></button>
+  </section>
+
+  <section class="dash" id="broadcastDash">
+    <h2 class="dash-title">WhatsApp Marketing</h2>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin:-8px 0 16px;">Pick items, compose a message and send to past buyers. <strong>Manual mode for now</strong>. Clicks open WhatsApp Web pre-filled with the message and the buyer's number.</p>
+
+    <div class="set-form" style="background:#fff;">
+      <div class="field">
+        <label>Subject of the broadcast</label>
+        <input id="broadcastSubject" type="text" placeholder="e.g. New shirts just landed">
+      </div>
+      <div class="field">
+        <label>Items to include in the message <small style="font-weight:400;color:#999;">(optional, search and tap to add)</small></label>
+        <div id="broadcastSelectedItems" class="set-selected-items"></div>
+        <input id="broadcastItemSearch" type="text" placeholder="Search items by name…" style="margin-top:8px;">
+        <div id="broadcastItemPicker" class="set-item-picker"></div>
+      </div>
+      <div class="field">
+        <label>Recipients <small style="font-weight:400;color:#999;">past buyers from your sales history; deselect anyone you don't want to message</small></label>
+        <div id="broadcastRecipients" class="broadcast-recipients"></div>
+      </div>
+      <div class="field">
+        <label>Message preview</label>
+        <textarea id="broadcastPreview" readonly style="min-height:120px;background:var(--bg);font-family:inherit;"></textarea>
+      </div>
+      <div class="admin-actions">
+        <button class="btn-admin gold" id="broadcastStartBtn">Start sending →</button>
+        <button class="btn-admin" id="broadcastCopyBtn">Copy message only</button>
+      </div>
+      <p id="broadcastStatus" style="font-size:13px;color:var(--ink-soft);margin-top:10px;"></p>
+    </div>
+  </section>
+
+  <section class="dash" id="analyticsDash">
+    <h2 class="dash-title">Analytics</h2>
+    <p style="font-size:13.5px;color:var(--ink-soft);margin:-8px 0 16px;">What's being looked at and clicked. <strong>Data is per-browser</strong> (localStorage), so this shows YOUR browsing of the public site. For visitor-wide stats, plug in Cloudflare Web Analytics or Plausible.</p>
+    <div class="inv-kpi-grid" id="analyticsKpiGrid"></div>
+    <div class="dash-grid" style="margin-top:18px;">
+      <div class="dash-card">
+        <h3>Most viewed items</h3>
+        <div id="analyticsTopViews" class="recent-list"></div>
+      </div>
+      <div class="dash-card">
+        <h3>Most enquired about</h3>
+        <div id="analyticsTopEnquiries" class="recent-list"></div>
+      </div>
+    </div>
+  </section>
+
+  <div class="admin-form" id="addForm">
     <h2 id="formTitle">Add a new item</h2>
     <input type="hidden" id="editingId">
 
     <div class="field">
-      <label>Item image</label>
+      <label>Main image</label>
       <input id="imageInput" type="file" accept="image/*">
       <div id="imagePreview" style="margin-top:10px;"></div>
-      <p style="font-size:12px;color:#999;margin-top:6px;">Recommended: square crop, ~1080×1080.</p>
+      <p style="font-size:12px;color:#999;margin-top:6px;">Square crop recommended · ~1080×1080.</p>
     </div>
 
     <div class="field">
-      <label>Item name</label>
-      <input id="nameInput" type="text" placeholder="e.g. Black High-Waist Skinny Jeans" required>
+      <label>Additional images <small style="font-weight:400;color:#999;">optional, up to 8. Buyers swipe through them on the card.</small></label>
+      <input id="extraImagesInput" type="file" accept="image/*" multiple>
+      <div id="extraImagesPreview" class="extra-imgs-preview"></div>
     </div>
 
-    <div class="field">
-      <label>Category</label>
-      <select id="categoryInput">
-        <option value="">Select category</option>
-        <option value="Jeans">Jeans</option>
-        <option value="Tshirts">Tshirts</option>
-        <option value="Polos">Polos</option>
-        <option value="Shirts">Shirts</option>
-        <option value="Long Sleeve Tees">Long Sleeve Tees</option>
-        <option value="Sports Jerseys">Sports Jerseys</option>
-        <option value="Jackets">Jackets</option>
-        <option value="Khakis/Plaid Pants">Khakis/Plaid Pants</option>
-        <option value="Shorts">Shorts</option>
-        <option value="Caps">Caps</option>
-        <option value="Other">Other</option>
-      </select>
-    </div>
-
-    <div class="field">
-      <label>Available sizes</label>
-      <div class="size-toggle-group" id="sizeToggleGroup">
-        <span class="size-toggle-section">Standard:</span>
-        <label class="size-toggle"><input type="checkbox" name="size" value="XS">XS</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="S">S</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="M">M</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="L">L</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="XL">XL</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="XXL">XXL</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="3XL">3XL</label>
-        <span class="size-toggle-section" style="margin-left:8px;">Jeans (waist):</span>
-        <label class="size-toggle"><input type="checkbox" name="size" value="24">24</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="26">26</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="28">28</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="30">30</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="32">32</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="34">34</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="36">36</label>
-        <label class="size-toggle"><input type="checkbox" name="size" value="38">38</label>
+    <div class="field-row">
+      <div class="field">
+        <label>Item name</label>
+        <input id="nameInput" type="text" placeholder="e.g. Slim Fit Denim Jeans" required>
+      </div>
+      <div class="field">
+        <label>Category</label>
+        <select id="categoryInput">
+          <option value="">Select category</option>
+          <option value="Jeans">Jeans</option>
+          <option value="Tshirts">Tshirts</option>
+          <option value="Polos">Polos</option>
+          <option value="Shirts">Shirts</option>
+          <option value="Long Sleeve Tees">Long Sleeve Tees</option>
+          <option value="Sports Jerseys">Sports Jerseys</option>
+          <option value="Jackets">Jackets</option>
+          <option value="Khakis/Plaid Pants">Khakis/Plaid Pants</option>
+          <option value="Shorts">Shorts</option>
+          <option value="Caps">Caps</option>
+          <option value="Other">Other</option>
+        </select>
       </div>
     </div>
 
     <div class="field">
       <label>Description</label>
-      <textarea id="descInput" placeholder="Tap 'Suggest with AI' or write your own..."></textarea>
-      <button class="btn-admin" id="aiBtn" type="button" style="margin-top:8px;">✨ Suggest description (offline)</button>
+      <textarea id="descInput" placeholder="Tap 'Suggest' or write your own..."></textarea>
+      <button class="btn-admin" id="aiBtn" type="button" style="margin-top:8px;">✨ Suggest description</button>
     </div>
 
     <div class="field-row">
@@ -127,9 +191,44 @@
       </div>
     </div>
 
-    <div class="field field-checkbox">
-      <input id="soldInput" type="checkbox">
-      <label for="soldInput" style="margin:0;">Mark as sold</label>
+    <div class="field">
+      <label>Stock <small style="font-weight:400;color:#999;">enter quantity per size, or use "One size" if it doesn't come in sizes (caps, etc.)</small></label>
+
+      <div class="stock-entry-group">
+        <label class="group-label">One size / no sizing</label>
+        <div class="stock-entry-row">
+          <div class="stock-entry-item" style="align-items:flex-start;">
+            <span class="size-lbl">Qty</span>
+            <input type="number" min="0" step="1" data-size="One Size" class="stock-qty" style="width:120px;" placeholder="e.g. 5">
+          </div>
+        </div>
+      </div>
+
+      <div class="stock-entry-group">
+        <label class="group-label">Standard</label>
+        <div class="stock-entry-row" id="stockStandard">
+          <div class="stock-entry-item"><span class="size-lbl">XS</span><input type="number" min="0" step="1" data-size="XS" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">S</span><input type="number" min="0" step="1" data-size="S" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">M</span><input type="number" min="0" step="1" data-size="M" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">L</span><input type="number" min="0" step="1" data-size="L" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">XL</span><input type="number" min="0" step="1" data-size="XL" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">XXL</span><input type="number" min="0" step="1" data-size="XXL" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">3XL</span><input type="number" min="0" step="1" data-size="3XL" class="stock-qty"></div>
+        </div>
+      </div>
+
+      <div class="stock-entry-group" style="margin-top:10px;">
+        <label class="group-label">Numeric (jeans waist)</label>
+        <div class="stock-entry-row" id="stockNumeric">
+          <div class="stock-entry-item"><span class="size-lbl">28</span><input type="number" min="0" step="1" data-size="28" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">30</span><input type="number" min="0" step="1" data-size="30" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">32</span><input type="number" min="0" step="1" data-size="32" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">34</span><input type="number" min="0" step="1" data-size="34" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">36</span><input type="number" min="0" step="1" data-size="36" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">38</span><input type="number" min="0" step="1" data-size="38" class="stock-qty"></div>
+          <div class="stock-entry-item"><span class="size-lbl">40</span><input type="number" min="0" step="1" data-size="40" class="stock-qty"></div>
+        </div>
+      </div>
     </div>
 
     <div class="admin-actions">
@@ -138,39 +237,83 @@
     </div>
   </div>
 
-  <h2 style="font-family:'Cormorant Garamond',serif;font-size:28px;font-weight:500;margin:30px 0 16px;">Existing items (<span id="bagCount">0</span>)</h2>
+  <div class="section-divider" id="allItems">
+    All items <span id="bagCount">0</span>
+    <button class="btn-admin" style="margin-left:auto;font-size:12px;padding:6px 12px;" onclick="bulkSelectAll()">Select all</button>
+  </div>
+  <div class="bulk-bar" id="bulkActions" style="display:none;">
+    <span><strong id="bulkCount">0</strong> selected</span>
+    <button class="btn-admin" onclick="bulkSetCategory()">Set category</button>
+    <button class="btn-admin danger" onclick="bulkDelete()">Delete</button>
+    <button class="btn-admin" onclick="bulkClear()">Clear</button>
+  </div>
   <div class="admin-list" id="adminList"></div>
+
 </div>
 
 <div class="toast" id="toast"></div>
 
-<!-- BUYER CAPTURE MODAL -->
-<div id="buyerModal" class="modal" style="display:none;">
+<!-- SALE MODAL -->
+<div id="saleModal" class="modal" style="display:none;">
   <div class="modal-card">
-    <h3 id="buyerModalTitle">Mark as sold</h3>
-    <p style="color:#666;font-size:14px;margin-bottom:16px;">Save the buyer's details for future remarketing (optional).</p>
+    <h3 id="saleModalTitle">Record a sale</h3>
+    <p class="sub">Reduce stock and optionally save buyer details for remarketing.</p>
 
     <div class="field">
-      <label>Buyer's name</label>
+      <label>Size sold</label>
+      <select id="saleSizeInput"></select>
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>Quantity</label>
+        <input id="saleQtyInput" type="number" min="1" value="1">
+      </div>
+      <div class="field">
+        <label>Sale price (Ksh) <small style="font-weight:400;color:#999;">optional override</small></label>
+        <input id="salePriceInput" type="number" min="0" step="50">
+      </div>
+    </div>
+
+    <div class="field">
+      <label>Buyer name <small style="font-weight:400;color:#999;">optional</small></label>
       <input id="buyerName" type="text" placeholder="e.g. Jane Wanjiru">
     </div>
     <div class="field">
-      <label>Phone (with country code)</label>
-      <input id="buyerPhone" type="tel" placeholder="e.g. 254712345678">
+      <label>Buyer phone <small style="font-weight:400;color:#999;">optional</small></label>
+      <input id="buyerPhone" type="tel" placeholder="254712345678">
     </div>
     <div class="field">
-      <label>Notes (optional)</label>
-      <input id="buyerNotes" type="text" placeholder="Drop-off location, payment method...">
+      <label>Notes <small style="font-weight:400;color:#999;">optional</small></label>
+      <input id="buyerNotes" type="text" placeholder="Pickup or delivery, payment method...">
     </div>
 
     <div class="admin-actions" style="margin-top:18px;">
-      <button class="btn-admin primary" id="buyerSaveBtn">Save &amp; mark sold</button>
-      <button class="btn-admin" id="buyerSkipBtn">Skip · just mark sold</button>
-      <button class="btn-admin danger" id="buyerCancelBtn">Cancel</button>
+      <button class="btn-admin gold" id="saleSaveBtn">Record sale</button>
+      <button class="btn-admin danger" id="saleCancelBtn">Cancel</button>
     </div>
   </div>
 </div>
 
-<script src="admin.js?v=11"></script>
+<!-- RESTOCK MODAL -->
+<div id="restockModal" class="modal" style="display:none;">
+  <div class="modal-card">
+    <h3 id="restockModalTitle">Restock item</h3>
+    <p class="sub">Add units to existing stock.</p>
+    <div class="field">
+      <label>Size</label>
+      <select id="restockSizeInput"></select>
+    </div>
+    <div class="field">
+      <label>Units to add</label>
+      <input id="restockQtyInput" type="number" min="1" value="1">
+    </div>
+    <div class="admin-actions" style="margin-top:18px;">
+      <button class="btn-admin primary" id="restockSaveBtn">Add stock</button>
+      <button class="btn-admin danger" id="restockCancelBtn">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<script src="admin.js?v=12"></script>
 </body>
 </html>
