@@ -1,5 +1,5 @@
 // Toni's Jeans & Tees Admin
-const ADMIN_PASSWORD = 'tony123';
+const ADMIN_PASSWORD = 'toni123';
 const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
 const ADMIN_TOKEN = atob('R3J2bjl3NmVWaDVWc242LTd5cVhrNzk4ZW5hR0hWall5VnM3dkxZRk9Naw==');
 
