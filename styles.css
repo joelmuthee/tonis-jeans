@@ -700,10 +700,11 @@ html { scroll-behavior: smooth; }
   margin: 4px 0 12px;
 }
 .ig-quick-row {
-  display: flex; gap: 8px;
+  display: flex; gap: 8px; flex-wrap: wrap;
 }
 .ig-quick-row input[type="url"] {
-  flex: 1;
+  flex: 1 1 200px;
+  min-width: 0;
   padding: 12px 14px;
   border: 1px solid var(--ink);
   border-radius: 8px;
@@ -713,7 +714,10 @@ html { scroll-behavior: smooth; }
   color: var(--ink);
 }
 .ig-quick-row input[type="url"]:focus { outline: none; border-color: var(--gold-deep); box-shadow: 0 0 0 3px rgba(217,143,16,0.2); }
-.ig-quick-row .btn-admin { flex-shrink: 0; padding: 12px 18px; }
+.ig-quick-row .btn-admin { flex-shrink: 0; padding: 12px 18px; white-space: nowrap; }
+@media (max-width: 540px) {
+  .ig-quick-row .btn-admin { width: 100%; }
+}
 .ig-quick-status { font-size: 13px; margin: 10px 0 0; min-height: 18px; font-weight: 500; }
 .ig-quick-status.ok { color: #1a7a40; }
 .ig-quick-status.err { color: #b00020; }
