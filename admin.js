@@ -321,6 +321,9 @@ async function commitSold(withBuyer) {
   if (!pendingBag) return;
   const bag = pendingBag;
   bag.sold = true;
+  // Always record the sale timestamp - even on Skip - so the dashboard
+  // can bucket sales by today/week/month. Buyer name/phone stay optional.
+  const soldAt = new Date().toISOString();
   if (withBuyer) {
     const name = buyerName.value.trim();
     const phone = buyerPhone.value.trim().replace(/[^0-9+]/g, '');
@@ -329,12 +332,9 @@ async function commitSold(withBuyer) {
       showToast('Add a name or phone, or hit Skip.');
       return;
     }
-    bag.soldTo = {
-      name,
-      phone,
-      notes,
-      soldAt: new Date().toISOString(),
-    };
+    bag.soldTo = { name, phone, notes, soldAt };
+  } else {
+    bag.soldTo = { name: '', phone: '', notes: '', soldAt };
   }
 
   closeBuyerModal();
