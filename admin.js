@@ -498,6 +498,32 @@ document.getElementById('saleSaveBtn').addEventListener('click', async () => {
   } catch (err) { showToast('Error: ' + err.message); }
 });
 
+document.getElementById('saleSkipBtn')?.addEventListener('click', async () => {
+  // One-click thrift sale: no buyer info, qty 1, first available size.
+  const bag = bags.find(b => b.id === pendingSaleId);
+  if (!bag) return;
+  const size = saleSizeInput.value || 'One size';
+
+  if (bag.stock && bag.stock[size] !== undefined) {
+    bag.stock[size] = Math.max(0, bag.stock[size] - 1);
+  }
+  if (!bag.sales) bag.sales = [];
+  bag.sales.push({
+    size, qty: 1, salePrice: bag.price,
+    buyerName: '', buyerPhone: '', notes: '',
+    soldAt: new Date().toISOString(),
+  });
+
+  closeSaleModal();
+  try {
+    await apiPublish();
+    renderList();
+    renderDashboard();
+    renderInventory();
+    showToast(`Marked sold.`);
+  } catch (err) { showToast('Error: ' + err.message); }
+});
+
 document.getElementById('saleCancelBtn').addEventListener('click', closeSaleModal);
 saleModal.addEventListener('click', e => { if (e.target === saleModal) closeSaleModal(); });
 
