@@ -609,7 +609,7 @@ html { scrollbar-color: var(--gold) var(--bg); scrollbar-width: thin; }
 .admin-nav a:hover .admin-nav-count { background: rgba(255,255,255,0.15); color: var(--gold-light); }
 
 html { scroll-behavior: smooth; }
-#addForm, #salesDash, #invDash, #broadcastDash, #analyticsDash, #allItems { scroll-margin-top: 80px; }
+#addForm, #salesDash, #invDash, #broadcastDash, #allItems { scroll-margin-top: 80px; }
 
 /* Sales dashboard */
 .dash { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 24px; margin-bottom: 24px; }
