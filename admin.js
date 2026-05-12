@@ -438,7 +438,7 @@ function openSaleModal(id) {
   const bag = bags.find(b => b.id === id);
   if (!bag) return;
   pendingSaleId = id;
-  document.getElementById('saleModalTitle').textContent = `Record sale: ${bag.name}`;
+  document.getElementById('saleModalTitle').textContent = `Sell: ${bag.name}`;
   saleSizeInput.innerHTML = '';
   const stock = bag.stock || {};
   const hasSizes = Object.keys(stock).length > 0;
@@ -710,6 +710,13 @@ function renderInventory() {
 
 // ====== ITEM LIST ======
 let bulkSelected = new Set();
+let adminSearchQuery = '';
+
+function matchesSearch(bag, q) {
+  if (!q) return true;
+  const hay = `${bag.name || ''} ${bag.category || ''}`.toLowerCase();
+  return q.split(/\s+/).every(tok => hay.includes(tok));
+}
 
 function renderList() {
   const list = document.getElementById('adminList');
@@ -717,10 +724,17 @@ function renderList() {
   const navCount = document.getElementById('navItemCount');
   if (navCount) navCount.textContent = bags.length;
   renderBulkBar();
-  list.innerHTML = bags.map(bag => {
+
+  const q = adminSearchQuery.trim().toLowerCase();
+  const filtered = q ? bags.filter(b => matchesSearch(b, q)) : bags;
+  const countEl = document.getElementById('adminSearchCount');
+  if (countEl) countEl.textContent = q ? `${filtered.length} ${filtered.length === 1 ? 'match' : 'matches'}` : '';
+
+  list.innerHTML = filtered.map(bag => {
     const units = totalStock(bag);
     const sold = totalUnitsSold(bag);
     const stockSummary = Object.entries(bag.stock || {}).map(([sz, q]) => `${sz}:${q}`).join(' · ') || 'No stock set';
+    const stockShort = units === 0 ? 'Sold' : `${units} left`;
     const checked = bulkSelected.has(bag.id);
     return `
     <div class="admin-card ${checked ? 'bulk-selected' : ''}">
@@ -730,12 +744,15 @@ function renderList() {
       <img src="${bag.image}" alt="${escapeHtml(bag.name)}">
       <div class="admin-card-body">
         <div class="admin-card-name">${escapeHtml(bag.name)}</div>
-        ${bag.category ? `<div style="margin:3px 0;"><span style="background:#f0ede8;border-radius:4px;padding:2px 8px;font-size:11px;font-weight:600;">${escapeHtml(bag.category)}</span></div>` : ''}
-        <div class="admin-card-price">${fmtKsh(bag.price)}</div>
+        ${bag.category ? `<div class="admin-card-cat"><span>${escapeHtml(bag.category)}</span></div>` : ''}
+        <div class="admin-card-pricerow">
+          <span class="admin-card-price">${fmtKsh(bag.price)}</span>
+          <span class="admin-card-stockshort ${units === 0 ? 'sold' : ''}">${stockShort}</span>
+        </div>
         <div class="admin-card-stock">${units} in stock · ${sold} sold | ${stockSummary}</div>
         <div class="admin-card-actions">
           <button onclick="editItem('${bag.id}')">Edit</button>
-          <button onclick="openSaleModal('${bag.id}')" style="background:#f0faf4;border-color:#b0d8c0;color:#1a7a40;">Record sale</button>
+          <button onclick="openSaleModal('${bag.id}')" style="background:#f0faf4;border-color:#b0d8c0;color:#1a7a40;">Sell</button>
           <button class="danger" onclick="deleteItem('${bag.id}')">Delete</button>
         </div>
       </div>
@@ -786,6 +803,20 @@ async function bulkSetCategory() {
     renderList();
   } catch (err) { showToast('Sync failed: ' + err.message); }
 }
+
+// Debounced search input
+(function wireAdminSearch() {
+  const input = document.getElementById('adminSearch');
+  if (!input) return;
+  let timer;
+  input.addEventListener('input', () => {
+    clearTimeout(timer);
+    timer = setTimeout(() => {
+      adminSearchQuery = input.value;
+      renderList();
+    }, 160);
+  });
+})();
 
 window.editItem = editItem;
 window.deleteItem = deleteItem;

@@ -9,7 +9,7 @@
 <meta name="theme-color" content="#1a1410">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=18">
+<link rel="stylesheet" href="styles.css?v=19">
 <script src="https://www.google.com/recaptcha/enterprise.js?render=6LeDBFwpAAAAAJe8ux9-imrqZ2ueRsEtdiWoDDpX" async defer></script>
 </head>
 <body style="background:#fff8ec;">
@@ -240,6 +240,13 @@
     All items <span id="bagCount">0</span>
     <button class="btn-admin" style="margin-left:auto;font-size:12px;padding:6px 12px;" onclick="bulkSelectAll()">Select all</button>
   </div>
+  <div class="admin-search-wrap">
+    <span class="admin-search-icon" aria-hidden="true">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+    </span>
+    <input id="adminSearch" type="search" placeholder="Search items by name or category…" autocomplete="off">
+    <span class="admin-search-count" id="adminSearchCount"></span>
+  </div>
   <div class="bulk-bar" id="bulkActions" style="display:none;">
     <span><strong id="bulkCount">0</strong> selected</span>
     <button class="btn-admin" onclick="bulkSetCategory()">Set category</button>
@@ -293,6 +300,6 @@
   </div>
 </div>
 
-<script src="admin.js?v=15"></script>
+<script src="admin.js?v=16"></script>
 </body>
 </html>
