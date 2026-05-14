@@ -7,6 +7,9 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
   const availPills = document.getElementById('availPills');
   const catPills = document.getElementById('catPills');
   const sizePills = document.getElementById('sizePills');
+  const searchInput = document.getElementById('searchInput');
+  const searchClear = document.getElementById('searchClear');
+  const sortSelect = document.getElementById('sortSelect');
   const PAGE_SIZE = 15;
   let items = [];
   let settings = {};
@@ -14,6 +17,35 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
   let currentCat = 'all';
   let currentSize = 'all';
   let currentPage = 1;
+  let currentSearch = '';
+  let currentSort = 'featured';
+
+  // Wishlist
+  const WISHLIST_KEY = 'toni_wishlist';
+  function loadWishlist() {
+    try { return new Set(JSON.parse(localStorage.getItem(WISHLIST_KEY) || '[]')); }
+    catch { return new Set(); }
+  }
+  function saveWishlist(set) { localStorage.setItem(WISHLIST_KEY, JSON.stringify([...set])); }
+  let wishlist = loadWishlist();
+  function toggleWishlist(id) {
+    if (wishlist.has(id)) wishlist.delete(id); else wishlist.add(id);
+    saveWishlist(wishlist);
+    refreshWishlistUi();
+  }
+  function refreshWishlistUi() {
+    const count = wishlist.size;
+    const badge = document.getElementById('wishlistCount');
+    if (badge) {
+      badge.textContent = count;
+      badge.hidden = count === 0;
+    }
+    document.querySelectorAll('[data-action="wishlist"]').forEach(btn => {
+      const on = wishlist.has(btn.dataset.id);
+      btn.classList.toggle('on', on);
+      btn.setAttribute('aria-pressed', on ? 'true' : 'false');
+    });
+  }
 
   async function loadData() {
     try {
@@ -68,9 +100,30 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     const phone = (settings.whatsappNumber || '254721623937');
     const avail = availSizes(item);
     const sizePart = avail.length ? ` (sizes: ${avail.join(', ')})` : '';
-    const link = item.reel || item.instagramUrl || 'https://www.instagram.com/tonis_jeans_and_tees/';
-    const msg = `Hi Toni! I'd like to enquire about the *${item.name}*${sizePart} (${fmtPrice(item.price)}) from your catalog.\n\nLink: ${link}`;
+    const pricePart = (item.price > 0) ? ` (${fmtPrice(item.price)})` : '';
+    const msg = `Hi Toni! I'd like to enquire about the *${item.name}*${sizePart}${pricePart} from your catalog.\n\n${item.image}`;
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  }
+  function whatsappLinkAll(itemList) {
+    const phone = (settings.whatsappNumber || '254721623937');
+    if (!itemList.length) return `https://wa.me/${phone}`;
+    const lines = itemList.map((it, i) => {
+      const pricePart = it.price > 0 ? ` (${fmtPrice(it.price)})` : '';
+      return `${i + 1}. *${it.name}*${pricePart}`;
+    }).join('\n');
+    const msg = `Hi Toni! I'd like to enquire about these items from my wishlist:\n\n${lines}`;
+    return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  }
+  function priceHtml(item) {
+    return item.price > 0
+      ? `<span class="card-price">${fmtPrice(item.price)}</span>`
+      : `<span class="card-price card-price-onreq"><small>Price on request</small></span>`;
+  }
+  function isNew(item) {
+    if (!item.createdAt) return false;
+    const created = new Date(item.createdAt).getTime();
+    if (!created) return false;
+    return (Date.now() - created) < 7 * 24 * 60 * 60 * 1000;
   }
 
   function escapeHtml(s) {
@@ -152,16 +205,32 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     return false;
   }
 
+  function searchMatch(item, q) {
+    if (!q) return true;
+    const hay = `${item.name || ''} ${item.description || ''} ${item.category || ''}`.toLowerCase();
+    return q.split(/\s+/).every(tok => hay.includes(tok));
+  }
+
   function render() {
     buildCatPills();
     buildSizePills();
 
-    const filtered = items.filter(item => {
+    const q = currentSearch.trim().toLowerCase();
+    let filtered = items.filter(item => {
       const soldOut = isSoldOut(item);
       const availOk = currentAvail === 'all' || (currentAvail === 'sold' ? soldOut : !soldOut);
       const catOk = currentCat === 'all' || item.category === currentCat;
-      return availOk && catOk && sizeMatch(item);
+      return availOk && catOk && sizeMatch(item) && searchMatch(item, q);
     });
+
+    // Sort
+    if (currentSort === 'newest') {
+      filtered = [...filtered].sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0));
+    } else if (currentSort === 'price-asc') {
+      filtered = [...filtered].sort((a, b) => (a.price || 0) - (b.price || 0));
+    } else if (currentSort === 'price-desc') {
+      filtered = [...filtered].sort((a, b) => (b.price || 0) - (a.price || 0));
+    } // featured = original IG-grid order, do nothing
 
     const availCount = items.filter(i => !isSoldOut(i)).length;
     const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
@@ -185,20 +254,25 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
         : '';
       const units = totalStock(item);
       const lowStock = !soldOut && units >= 1 && units <= 3;
+      const heartOn = wishlist.has(item.id);
+      const newBadge = isNew(item) ? '<span class="badge-new">NEW</span>' : '';
       return `
-      <article class="card ${soldOut ? 'sold' : ''}">
+      <article class="card fade-up ${soldOut ? 'sold' : ''}">
         <div class="card-img-wrap" data-action="zoom" data-id="${item.id}">
           <img class="card-img" src="${item.image}?${IMG_VERSION}" alt="${escapeHtml(item.name)}" loading="lazy">
+          ${newBadge}
           ${soldOut ? '<span class="badge-sold">Sold out</span>' : ''}
-          ${lowStock ? `<span class="badge-low">Only ${units} left</span>` : ''}
           ${catBadge}
+          <button class="heart-btn ${heartOn ? 'on' : ''}" data-action="wishlist" data-id="${item.id}" aria-pressed="${heartOn}" aria-label="${heartOn ? 'Remove from wishlist' : 'Save to wishlist'}">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+          </button>
         </div>
         <div class="card-body">
           <h3 class="card-title">${escapeHtml(item.name)}</h3>
           <p class="card-desc">${escapeHtml(item.description || '')}</p>
           ${sizesHtml}
           <div class="card-price-row">
-            <span class="card-price">${fmtPrice(item.price)} <small>· drop-off CBD</small></span>
+            ${priceHtml(item)}
           </div>
           <div class="card-actions">
             <a class="btn-card primary" href="${whatsappLink(item)}" target="_blank" rel="noopener" ${soldOut ? 'aria-disabled="true"' : ''}>
@@ -208,6 +282,10 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
         </div>
       </article>`;
     }).join('');
+
+    // Re-observe new cards for fade-in
+    observeFadeTargets();
+    refreshWishlistUi();
 
     // Numbered pagination
     const oldPager = document.getElementById('pagerWrap');
@@ -267,6 +345,111 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     });
   });
 
+  // Search input (debounced 180ms)
+  if (searchInput) {
+    let timer;
+    searchInput.addEventListener('input', () => {
+      clearTimeout(timer);
+      timer = setTimeout(() => {
+        currentSearch = searchInput.value;
+        currentPage = 1;
+        if (searchClear) searchClear.hidden = !searchInput.value;
+        render();
+      }, 180);
+    });
+    searchClear?.addEventListener('click', () => {
+      searchInput.value = '';
+      currentSearch = '';
+      searchClear.hidden = true;
+      currentPage = 1;
+      render();
+      searchInput.focus();
+    });
+  }
+
+  // Sort dropdown
+  sortSelect?.addEventListener('change', () => {
+    currentSort = sortSelect.value;
+    currentPage = 1;
+    render();
+  });
+
+  // Wishlist drawer
+  const wishlistBtn = document.getElementById('wishlistBtn');
+  const drawer = document.getElementById('wishlistDrawer');
+  const wishlistListEl = document.getElementById('wishlistList');
+  const wishlistFoot = document.getElementById('wishlistFoot');
+  const wishlistEnquireAll = document.getElementById('wishlistEnquireAll');
+
+  function openDrawer() {
+    renderWishlistDrawer();
+    drawer.classList.add('open');
+    drawer.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  }
+  function closeDrawer() {
+    drawer.classList.remove('open');
+    drawer.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  }
+  function renderWishlistDrawer() {
+    const list = [...wishlist].map(id => items.find(i => i.id === id)).filter(Boolean);
+    if (!list.length) {
+      wishlistListEl.innerHTML = '<p class="drawer-empty">No saved items yet. Tap the heart on any item to save it.</p>';
+      wishlistFoot.hidden = true;
+      return;
+    }
+    wishlistListEl.innerHTML = list.map(it => `
+      <div class="wishlist-row">
+        <img src="${it.image}" alt="${escapeHtml(it.name)}">
+        <div class="wishlist-row-body">
+          <div class="wishlist-row-name">${escapeHtml(it.name)}</div>
+          <div class="wishlist-row-meta">${it.price > 0 ? fmtPrice(it.price) : 'Price on request'}</div>
+        </div>
+        <button class="wishlist-remove" data-action="wishlist-remove" data-id="${it.id}" aria-label="Remove">&times;</button>
+      </div>`).join('');
+    wishlistFoot.hidden = false;
+    wishlistEnquireAll.href = whatsappLinkAll(list);
+  }
+  wishlistBtn?.addEventListener('click', openDrawer);
+  drawer?.addEventListener('click', e => {
+    if (e.target.dataset.action === 'close-drawer') closeDrawer();
+    if (e.target.dataset.action === 'wishlist-remove') {
+      toggleWishlist(e.target.dataset.id);
+      renderWishlistDrawer();
+    }
+  });
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && drawer?.classList.contains('open')) closeDrawer();
+  });
+
+  // Gallery delegated click for heart buttons
+  gallery.addEventListener('click', e => {
+    const heart = e.target.closest('[data-action="wishlist"]');
+    if (heart) { e.stopPropagation(); toggleWishlist(heart.dataset.id); }
+  });
+
+  // Fade-in-up on scroll (respects prefers-reduced-motion)
+  const reducedMotion = matchMedia('(prefers-reduced-motion: reduce)').matches;
+  let fadeObserver = null;
+  if (!reducedMotion && 'IntersectionObserver' in window) {
+    fadeObserver = new IntersectionObserver(entries => {
+      entries.forEach(en => {
+        if (en.isIntersecting) {
+          en.target.classList.add('in-view');
+          fadeObserver.unobserve(en.target);
+        }
+      });
+    }, { rootMargin: '0px 0px -10% 0px', threshold: 0.05 });
+  }
+  function observeFadeTargets() {
+    if (!fadeObserver) {
+      document.querySelectorAll('.fade-up:not(.in-view)').forEach(el => el.classList.add('in-view'));
+      return;
+    }
+    document.querySelectorAll('.fade-up:not(.in-view)').forEach(el => fadeObserver.observe(el));
+  }
+
   // Lightbox
   const lightbox = document.getElementById('lightbox');
   const lightboxImg = document.getElementById('lightboxImg');
@@ -308,4 +491,6 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
 
   await loadData();
   render();
+  observeFadeTargets();
+  refreshWishlistUi();
 })();

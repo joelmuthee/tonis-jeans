@@ -17,9 +17,14 @@
 <meta property="og:image:height" content="630">
 <meta property="og:image:alt" content="Toni's Jeans & Tees logo">
 <meta property="og:url" content="https://tonisjeans.essenceautomations.com/">
+<meta property="og:locale" content="en_KE">
 <meta property="og:site_name" content="Toni's Jeans & Tees">
 <meta name="twitter:card" content="summary_large_image">
+<meta name="twitter:title" content="Toni's Jeans & Tees · Quality jeans, tees and shirts in Nairobi">
+<meta name="twitter:description" content="Affordable jeans, tees, polos and shirts. Hand-picked. Visit shop T03, Mithoo Business Centre, Moi Avenue.">
 <meta name="twitter:image" content="https://tonisjeans.essenceautomations.com/images/og-share.jpg">
+<meta name="twitter:image:alt" content="Toni's Jeans & Tees logo">
+<link rel="canonical" href="https://tonisjeans.essenceautomations.com/">
 
 <link rel="icon" type="image/png" sizes="32x32" href="images/favicon-32.png">
 <link rel="icon" type="image/png" sizes="192x192" href="images/logo-192.png">
@@ -28,7 +33,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:wght@400;500;600;700&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-<link rel="stylesheet" href="styles.css?v=19">
+<link rel="stylesheet" href="styles.css?v=20">
 <!-- GHL external tracking - captures shoppers who visit this site -->
 <script src="https://link.essenceautomations.com/js/external-tracking.js" data-tracking-id="tk_d5a5c7952dc94771ba91855a4bfe3aea"></script>
 </head>
@@ -49,6 +54,10 @@
       <a href="#about">About</a>
       <a href="#how">How to buy</a>
       <a href="#contact">Contact</a>
+      <button class="nav-wishlist" id="wishlistBtn" type="button" aria-label="Open wishlist">
+        <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
+        <span class="nav-wishlist-count" id="wishlistCount" hidden>0</span>
+      </button>
       <a href="https://wa.me/254721623937" class="nav-cta" target="_blank" rel="noopener">WhatsApp</a>
     </div>
   </div>
@@ -56,10 +65,10 @@
 
 <header class="hero">
   <div class="hero-inner">
-    <p class="hero-eyebrow">Jeans · Shirts · Polos · Nairobi</p>
-    <h1 class="hero-title">Style that fits,<br><em>always.</em></h1>
-    <p class="hero-sub">Quality jeans, shirts, polos and more. Hand-picked and ready to wear. Shop the latest drops below.</p>
-    <div class="hero-cta">
+    <p class="hero-eyebrow fade-up">Jeans · Shirts · Polos · Nairobi</p>
+    <h1 class="hero-title fade-up">Style that fits,<br><em>always.</em></h1>
+    <p class="hero-sub fade-up">Quality jeans, shirts, polos and more. Hand-picked and ready to wear. Shop the latest drops below.</p>
+    <div class="hero-cta fade-up">
       <a href="#shop" class="btn btn-primary">Browse the collection</a>
       <a href="https://wa.me/254721623937" class="btn btn-ghost" target="_blank" rel="noopener">Chat on WhatsApp</a>
     </div>
@@ -69,12 +78,25 @@
 <section class="filters" id="shop">
   <div class="container">
     <div class="filters-bar">
-      <h2 class="section-title">The Collection</h2>
+      <h2 class="section-title fade-up">The Collection</h2>
       <div class="filter-pills" id="availPills">
         <button class="pill active" data-avail="all">All</button>
         <button class="pill" data-avail="available">Available</button>
         <button class="pill" data-avail="sold">Sold</button>
       </div>
+    </div>
+    <div class="search-sort-row">
+      <div class="search-wrap">
+        <svg class="search-icon" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="11" cy="11" r="7"></circle><line x1="21" y1="21" x2="16.65" y2="16.65"></line></svg>
+        <input id="searchInput" type="search" placeholder="Search items…" autocomplete="off">
+        <button class="search-clear" id="searchClear" type="button" aria-label="Clear search" hidden>&times;</button>
+      </div>
+      <select id="sortSelect" class="sort-select" aria-label="Sort items">
+        <option value="featured">Featured (IG order)</option>
+        <option value="newest">Newest first</option>
+        <option value="price-asc">Price: low → high</option>
+        <option value="price-desc">Price: high → low</option>
+      </select>
     </div>
     <div class="filter-pills filter-pills--cats" id="catPills" style="margin-top:8px;"></div>
     <div class="filter-pills filter-pills--sizes" id="sizePills" style="margin-top:8px;"></div>
@@ -82,13 +104,28 @@
   </div>
 </section>
 
+<!-- Wishlist drawer -->
+<div class="drawer" id="wishlistDrawer" aria-hidden="true">
+  <div class="drawer-backdrop" data-action="close-drawer"></div>
+  <aside class="drawer-panel">
+    <header class="drawer-head">
+      <h3>Your wishlist</h3>
+      <button class="drawer-close" data-action="close-drawer" aria-label="Close wishlist">&times;</button>
+    </header>
+    <div class="drawer-body" id="wishlistList"></div>
+    <footer class="drawer-foot" id="wishlistFoot" hidden>
+      <a class="btn btn-primary" id="wishlistEnquireAll" target="_blank" rel="noopener">Enquire about all on WhatsApp</a>
+    </footer>
+  </aside>
+</div>
+
 <main class="gallery container" id="gallery">
   <!-- Bags injected here -->
 </main>
 
 <section class="info" id="about">
   <div class="container info-grid">
-    <div>
+    <div class="fade-up">
       <h2>About Toni's Jeans & Tees</h2>
       <p>Toni's Jeans & Tees brings you quality jeans, shirts, polos and more at prices that make sense. Every piece is hand-picked and listed only once it's been checked over, so what you see is exactly what you get.</p>
       <p>We're based in Nairobi and love making great style accessible to everyone.</p>
@@ -107,7 +144,7 @@
         <a class="map-link" href="https://www.google.com/maps/search/?api=1&query=Mithoo+Business+Centre+Moi+Avenue+Nairobi" target="_blank" rel="noopener">Open in Google Maps →</a>
       </div>
     </div>
-    <div id="how">
+    <div id="how" class="fade-up">
       <h2>How to buy</h2>
       <ol class="steps">
         <li>Tap <strong>Enquire</strong> on the item you love. It opens WhatsApp with the item pre-filled.</li>
@@ -120,11 +157,11 @@
 
 <footer class="footer" id="contact">
   <div class="container footer-inner">
-    <div class="footer-brand">
+    <div class="footer-brand fade-up">
       <img src="images/logo.jpg" alt="Toni's Jeans & Tees" class="brand-logo">
       <p>Toni's Jeans & Tees · Affordable luxury, always.</p>
     </div>
-    <div class="footer-links">
+    <div class="footer-links fade-up">
       <span class="footer-shop">Shop T03 · Mithoo Business Centre · Moi Avenue, Nairobi</span>
       <a href="https://wa.me/254721623937" target="_blank" rel="noopener">WhatsApp · 0721 623 937</a>
       <a href="https://www.instagram.com/tonis_jeans_and_tees/" target="_blank" rel="noopener">Instagram · @tonis_jeans_and_tees</a>
@@ -140,6 +177,6 @@
   <div class="lightbox-caption" id="lightboxCaption"></div>
 </div>
 
-<script src="main.js?v=11"></script>
+<script src="main.js?v=12"></script>
 </body>
 </html>

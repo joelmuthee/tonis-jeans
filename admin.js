@@ -186,7 +186,9 @@ document.getElementById('igQuickBtn')?.addEventListener('click', async () => {
     if (!r.ok || data.error) throw new Error(data.error || 'Fetch failed');
 
     async function downloadAndStage(imgUrl) {
-      const r = await fetch(imgUrl);
+      // IG CDN blocks browser CORS — route through worker proxy.
+      const proxied = `${API_BASE}/api/ig-proxy?url=${encodeURIComponent(imgUrl)}`;
+      const r = await fetch(proxied);
       if (!r.ok) throw new Error('Image download failed');
       const blob = await r.blob();
       return new Promise((resolve, reject) => {
@@ -390,6 +392,11 @@ function resetForm() {
   if (igStatus) { igStatus.textContent = ''; igStatus.className = 'ig-quick-status'; }
   document.getElementById('formTitle').textContent = 'Add a new item';
   document.getElementById('cancelBtn').style.display = 'none';
+  // Restore IG quick-add panel + divider (hidden during edit mode).
+  const igPanel = document.getElementById('igQuickPanel');
+  const manualDivider = document.getElementById('manualEntryDivider');
+  if (igPanel) igPanel.style.display = '';
+  if (manualDivider) manualDivider.style.display = '';
 }
 
 function editItem(id) {
@@ -410,7 +417,12 @@ function editItem(id) {
   renderExtraImagesPreview();
   document.getElementById('formTitle').textContent = 'Edit item';
   document.getElementById('cancelBtn').style.display = 'inline-block';
-  window.scrollTo({ top: 0, behavior: 'smooth' });
+  // CATALOG-STANDARDS edit-mode UX: hide IG quick-add + divider, scroll to formTitle (auto, not smooth).
+  const igPanel = document.getElementById('igQuickPanel');
+  const manualDivider = document.getElementById('manualEntryDivider');
+  if (igPanel) igPanel.style.display = 'none';
+  if (manualDivider) manualDivider.style.display = 'none';
+  document.getElementById('formTitle').scrollIntoView({ behavior: 'auto', block: 'start' });
 }
 
 async function deleteItem(id) {

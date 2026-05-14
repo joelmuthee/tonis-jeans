@@ -134,6 +134,32 @@ export default {
       return json({ path: `/img/${name}`, name });
     }
 
+    // ---- IG image proxy: bypass CORS so the admin can download IG CDN images.
+    // Allowlisted to cdninstagram.com + fbcdn.net only.
+    if (request.method === "GET" && path === "/api/ig-proxy") {
+      const target = url.searchParams.get("url");
+      if (!target) return json({ error: "url required" }, 400);
+      let host;
+      try { host = new URL(target).hostname; } catch { return json({ error: "bad url" }, 400); }
+      if (!/(?:^|\.)(cdninstagram\.com|fbcdn\.net)$/i.test(host)) {
+        return json({ error: "host not allowed" }, 403);
+      }
+      try {
+        const r = await fetch(target);
+        if (!r.ok) return json({ error: `upstream ${r.status}` }, 502);
+        return new Response(r.body, {
+          status: 200,
+          headers: {
+            "Content-Type": r.headers.get("Content-Type") || "image/jpeg",
+            "Cache-Control": "public, max-age=86400",
+            "Access-Control-Allow-Origin": "*",
+          },
+        });
+      } catch (err) {
+        return json({ error: err.message }, 502);
+      }
+    }
+
     // ---- IG quick-add: server-side fetch of a public Instagram post ----
     // Lets the admin paste an IG URL and auto-fill image + caption. CORS prevents this from
     // the browser, so we proxy through the Worker.
