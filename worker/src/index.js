@@ -30,6 +30,20 @@ const isAuthed = (req, env) => {
   return env.ADMIN_TOKEN && auth.slice(7).trim() === env.ADMIN_TOKEN;
 };
 
+// Decode HTML entities IG slathers across og:description and the embed Caption
+// div. Named entities + decimal (&#064;) + hex (&#x40;). Without this, captions
+// contain literal "&#064;" instead of "@", which breaks admin's @<price> parser.
+const decodeEntities = (s) => (s || "")
+  .replace(/&amp;/g, "&")
+  .replace(/&quot;/g, '"')
+  .replace(/&#39;/g, "'")
+  .replace(/&apos;/g, "'")
+  .replace(/&lt;/g, "<")
+  .replace(/&gt;/g, ">")
+  .replace(/&nbsp;/g, " ")
+  .replace(/&#(\d+);/g, (_, n) => String.fromCharCode(parseInt(n, 10)))
+  .replace(/&#x([0-9a-fA-F]+);/g, (_, n) => String.fromCharCode(parseInt(n, 16)));
+
 const b64ToBytes = (b64) => {
   const bin = atob(b64);
   const bytes = new Uint8Array(bin.length);
@@ -191,10 +205,10 @@ export default {
             || html.match(/<meta\s+property=["']og:image["']\s+content=["']([^"']+)["']/i);
           if (img) imageUrl = img[1].replace(/&amp;/g, "&");
           const capDiv = html.match(/<div[^>]+class=["'][^"']*Caption[^"']*["'][^>]*>([\s\S]*?)<\/div>/i);
-          if (capDiv) caption = capDiv[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim();
+          if (capDiv) caption = decodeEntities(capDiv[1].replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
           if (!caption) {
             const desc = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i);
-            if (desc) caption = desc[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+            if (desc) caption = decodeEntities(desc[1]);
           }
         }
 
@@ -235,7 +249,7 @@ export default {
             const desc = html.match(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i);
             if (img) imageUrl = img[1].replace(/&amp;/g, "&");
             if (desc && !caption) {
-              caption = desc[1].replace(/&amp;/g, "&").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+              caption = decodeEntities(desc[1]);
               const m1 = caption.match(/^"(.+)"\s*-\s*@/s);
               if (m1) caption = m1[1];
             }
