@@ -1029,6 +1029,128 @@ document.getElementById('broadcastStartBtn')?.addEventListener('click', () => {
   next();
 });
 
+// ====== INSTAGRAM SYNC ======
+const IG_USER_ID = '50180633728';
+let igSyncCandidates = [];
+
+const igSyncCheckBtn = document.getElementById('igSyncCheckBtn');
+const igSyncCommitBtn = document.getElementById('igSyncCommitBtn');
+const igSyncCancelBtn = document.getElementById('igSyncCancelBtn');
+const igSyncStatus = document.getElementById('igSyncStatus');
+const igSyncListEl = document.getElementById('igSyncList');
+const igSyncCommitRow = document.getElementById('igSyncCommitRow');
+
+const CLOTHING_CATEGORIES = ['Jeans', 'Tshirts', 'Polos', 'Shirts', 'Long Sleeve Tees', 'Sports Jerseys', 'Jackets', 'Khakis/Plaid Pants', 'Shorts', 'Caps', 'Other'];
+
+igSyncCheckBtn?.addEventListener('click', checkForNewIgPosts);
+igSyncCancelBtn?.addEventListener('click', resetIgSync);
+igSyncCommitBtn?.addEventListener('click', commitIgSync);
+
+async function checkForNewIgPosts() {
+  igSyncCheckBtn.disabled = true;
+  igSyncStatus.textContent = 'Checking Instagram…';
+  igSyncListEl.innerHTML = '';
+  igSyncCommitRow.style.display = 'none';
+  try {
+    const res = await fetch(`${API_BASE}/api/ig-discover?user_id=${IG_USER_ID}&limit=20`, {
+      headers: { Authorization: `Bearer ${ADMIN_TOKEN}` },
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+    igSyncCandidates = data.items || [];
+    if (!igSyncCandidates.length) {
+      igSyncStatus.textContent = '✓ Catalog is up to date. No new posts on Instagram.';
+      igSyncCheckBtn.disabled = false;
+      return;
+    }
+    igSyncStatus.textContent = `Found ${igSyncCandidates.length} new post${igSyncCandidates.length === 1 ? '' : 's'}. Review below, then add.`;
+    renderIgSyncList();
+    igSyncCommitRow.style.display = 'flex';
+  } catch (err) {
+    igSyncStatus.textContent = '✗ ' + err.message;
+  } finally {
+    igSyncCheckBtn.disabled = false;
+  }
+}
+
+function renderIgSyncList() {
+  igSyncListEl.innerHTML = igSyncCandidates.map((it, i) => {
+    const s = it.suggested || {};
+    const stockText = Object.entries(s.stock || {}).map(([k, v]) => `${k}×${v}`).join(' · ') || 'One Size';
+    const captionShort = (it.caption || '').replace(/\s+/g, ' ').slice(0, 120);
+    const catOpts = CLOTHING_CATEGORIES.map(c => `<option value="${c}" ${c === s.category ? 'selected' : ''}>${c}</option>`).join('');
+    return `
+      <div class="ig-sync-row" data-idx="${i}">
+        <label class="ig-sync-check">
+          <input type="checkbox" data-ig-pick="${i}" checked>
+        </label>
+        <img src="${escapeHtml(it.imageUrl)}" alt="" referrerpolicy="no-referrer">
+        <div class="ig-sync-body">
+          <div class="ig-sync-row-1">
+            <input type="text" class="ig-sync-name" data-ig-name="${i}" value="${escapeHtml(s.name || '')}" placeholder="Name">
+            <select class="ig-sync-cat" data-ig-cat="${i}">${catOpts}</select>
+          </div>
+          <div class="ig-sync-row-2">
+            <span class="ig-sync-size">${escapeHtml(stockText)}</span>
+            <a href="${escapeHtml(it.postUrl)}" target="_blank" rel="noopener" class="ig-sync-postlink">view on IG ↗</a>
+          </div>
+          <div class="ig-sync-caption">${escapeHtml(captionShort)}</div>
+        </div>
+      </div>`;
+  }).join('');
+}
+
+function resetIgSync() {
+  igSyncCandidates = [];
+  igSyncListEl.innerHTML = '';
+  igSyncCommitRow.style.display = 'none';
+  igSyncStatus.textContent = '';
+}
+
+async function commitIgSync() {
+  const picks = [];
+  igSyncCandidates.forEach((it, i) => {
+    const cb = igSyncListEl.querySelector(`[data-ig-pick="${i}"]`);
+    if (!cb || !cb.checked) return;
+    const nameEl = igSyncListEl.querySelector(`[data-ig-name="${i}"]`);
+    const catEl = igSyncListEl.querySelector(`[data-ig-cat="${i}"]`);
+    picks.push({
+      shortcode: it.shortcode,
+      name: (nameEl?.value || it.suggested?.name || '').trim() || 'Pre-loved Piece',
+      category: catEl?.value || it.suggested?.category || 'Other',
+      stock: it.suggested?.stock || { 'One Size': 1 },
+      description: it.suggested?.description || '',
+      imageUrls: it.imageUrls || [it.imageUrl],
+      takenAt: it.takenAt,
+    });
+  });
+  if (!picks.length) { showToast('Tick at least one item to add.'); return; }
+  igSyncCommitBtn.disabled = true;
+  igSyncCommitBtn.textContent = `Adding ${picks.length}…`;
+  try {
+    const res = await fetch(`${API_BASE}/api/ig-sync`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${ADMIN_TOKEN}` },
+      body: JSON.stringify({ items: picks }),
+    });
+    const data = await res.json();
+    if (!res.ok || data.error) throw new Error(data.error || `HTTP ${res.status}`);
+    showToast(`Added ${data.added} piece${data.added === 1 ? '' : 's'} from Instagram.`);
+    igSyncStatus.textContent = `✓ Added ${data.added}. ${data.errors?.length ? `(${data.errors.length} failures)` : ''}`;
+    resetIgSync();
+    await loadData();
+    renderList();
+    renderDashboard();
+    renderInventory();
+  } catch (err) {
+    showToast('Error: ' + err.message);
+    igSyncStatus.textContent = '✗ ' + err.message;
+  } finally {
+    igSyncCommitBtn.disabled = false;
+    igSyncCommitBtn.textContent = 'Add selected pieces';
+  }
+}
+
 async function init() {
   showToast('Loading…');
   await loadData();
