@@ -117,13 +117,43 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     return (item.sales || []).length > 0;
   }
 
-  function whatsappLink(item) {
-    const phone = (settings.whatsappNumber || '254721623937');
+  // Message body WITHOUT the trailing image URL — shared by both tiers.
+  function enquireBody(item, selectedSize) {
     const avail = availSizes(item);
-    const sizePart = avail.length ? ` (sizes: ${avail.join(', ')})` : '';
+    const sizePart = selectedSize
+      ? ` (size ${selectedSize})`
+      : (avail.length ? ` (sizes: ${avail.join(', ')})` : '');
     const pricePart = (item.price > 0) ? ` (${fmtPrice(item.price)})` : '';
-    const msg = `Hi Toni! I'd like to enquire about the *${item.name}*${sizePart}${pricePart} from your catalog.\n\n${item.image}`;
+    return `Hi Toni! I'd like to enquire about the *${item.name}*${sizePart}${pricePart} from your catalog.`;
+  }
+  function whatsappLink(item, selectedSize) {
+    const phone = (settings.whatsappNumber || '254721623937');
+    // Append the image URL so WhatsApp's link preview can show a thumbnail (Tier 2 fallback).
+    const msg = `${enquireBody(item, selectedSize)}\n\n${item.image}`;
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
+  }
+
+  // Tier 1 (mobile): share the actual product photo through the native share sheet so it
+  // arrives in WhatsApp as a real image attachment, not just a link that may not preview.
+  // Returns true if shared; false to fall back to the wa.me link.
+  async function tryShareWithImage(item, selectedSize) {
+    if (!navigator.canShare || !navigator.share) return false;
+    if (!item.image) return false;
+    try {
+      const res = await fetch(item.image, { mode: 'cors' });
+      if (!res.ok) return false;
+      const blob = await res.blob();
+      const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+      const file = new File([blob], `${item.name.replace(/[^a-z0-9]+/gi, '_')}.${ext}`, { type: blob.type });
+      if (!navigator.canShare({ files: [file] })) return false;
+      const message = enquireBody(item, selectedSize);
+      try { await navigator.clipboard.writeText(message); } catch (_) { /* ignore */ }
+      await navigator.share({ files: [file], text: message, title: item.name });
+      return true;
+    } catch (_) {
+      // user cancelled or share failed — caller falls back to wa.me
+      return false;
+    }
   }
   function whatsappLinkAll(itemList) {
     const phone = (settings.whatsappNumber || '254721623937');
@@ -445,10 +475,26 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     if (e.key === 'Escape' && drawer?.classList.contains('open')) closeDrawer();
   });
 
-  // Gallery delegated click for heart buttons
-  gallery.addEventListener('click', e => {
+  // Gallery delegated click for heart buttons + Enquire (Tier 1 photo share)
+  gallery.addEventListener('click', async e => {
     const heart = e.target.closest('[data-action="wishlist"]');
-    if (heart) { e.stopPropagation(); toggleWishlist(heart.dataset.id); }
+    if (heart) { e.stopPropagation(); toggleWishlist(heart.dataset.id); return; }
+
+    // Enquire: on mobile, push the real photo via the native share sheet; fall back to wa.me.
+    const enquire = e.target.closest('.btn-card.primary');
+    if (enquire) {
+      const card = enquire.closest('.card');
+      const wrap = card?.querySelector('[data-id]');
+      const id = wrap?.dataset.id;
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      const isMobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
+      if (isMobile && navigator.canShare) {
+        e.preventDefault();
+        const shared = await tryShareWithImage(item);
+        if (!shared) window.open(enquire.href, '_blank', 'noopener');
+      }
+    }
   });
 
   // Fade-in-up on scroll (respects prefers-reduced-motion)
