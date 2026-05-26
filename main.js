@@ -119,7 +119,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     return (item.sales || []).length > 0;
   }
 
-  // Message body WITHOUT the trailing image URL — shared by both tiers.
+  // Message body WITHOUT the trailing URL — appended by whatsappLink.
   function enquireBody(item, selectedSize) {
     const avail = availSizes(item);
     const sizePart = selectedSize
@@ -130,33 +130,15 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
   }
   function whatsappLink(item, selectedSize) {
     const phone = (settings.whatsappNumber || '254721623937');
-    // Append the image URL so WhatsApp's link preview can show a thumbnail (Tier 2 fallback).
-    const msg = `${enquireBody(item, selectedSize)}\n\n${item.image}`;
+    const body = enquireBody(item, selectedSize);
+    // Append the item's /p/<id> share page — WhatsApp previews it as a card with the
+    // product photo + name + price. Still opens straight to WhatsApp (no app picker).
+    // Do NOT reintroduce navigator.share — it pops the OS app-chooser the owner hates.
+    const shareUrl = item.id ? `${API_BASE}/p/${encodeURIComponent(item.id)}` : '';
+    const msg = shareUrl ? `${body}\n\n${shareUrl}` : body;
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   }
 
-  // Tier 1 (mobile): share the actual product photo through the native share sheet so it
-  // arrives in WhatsApp as a real image attachment, not just a link that may not preview.
-  // Returns true if shared; false to fall back to the wa.me link.
-  async function tryShareWithImage(item, selectedSize) {
-    if (!navigator.canShare || !navigator.share) return false;
-    if (!item.image) return false;
-    try {
-      const res = await fetch(item.image, { mode: 'cors' });
-      if (!res.ok) return false;
-      const blob = await res.blob();
-      const ext = (blob.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-      const file = new File([blob], `${item.name.replace(/[^a-z0-9]+/gi, '_')}.${ext}`, { type: blob.type });
-      if (!navigator.canShare({ files: [file] })) return false;
-      const message = enquireBody(item, selectedSize);
-      try { await navigator.clipboard.writeText(message); } catch (_) { /* ignore */ }
-      await navigator.share({ files: [file], text: message, title: item.name });
-      return true;
-    } catch (_) {
-      // user cancelled or share failed — caller falls back to wa.me
-      return false;
-    }
-  }
   function whatsappLinkAll(itemList) {
     const phone = (settings.whatsappNumber || '254721623937');
     if (!itemList.length) return `https://wa.me/${phone}`;
@@ -477,26 +459,12 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
     if (e.key === 'Escape' && drawer?.classList.contains('open')) closeDrawer();
   });
 
-  // Gallery delegated click for heart buttons + Enquire (Tier 1 photo share)
-  gallery.addEventListener('click', async e => {
+  // Gallery delegated click for heart buttons. Enquire is a plain anchor: it just
+  // follows its wa.me href (target="_blank") so WhatsApp opens directly with the
+  // /p/<id> share page previewed — no OS app-chooser.
+  gallery.addEventListener('click', e => {
     const heart = e.target.closest('[data-action="wishlist"]');
     if (heart) { e.stopPropagation(); toggleWishlist(heart.dataset.id); return; }
-
-    // Enquire: on mobile, push the real photo via the native share sheet; fall back to wa.me.
-    const enquire = e.target.closest('.btn-card.primary');
-    if (enquire) {
-      const card = enquire.closest('.card');
-      const wrap = card?.querySelector('[data-id]');
-      const id = wrap?.dataset.id;
-      const item = items.find(i => i.id === id);
-      if (!item) return;
-      const isMobile = matchMedia('(pointer: coarse)').matches || /Android|iPhone|iPad|iPod|Mobile/i.test(navigator.userAgent);
-      if (isMobile && navigator.canShare) {
-        e.preventDefault();
-        const shared = await tryShareWithImage(item);
-        if (!shared) window.open(enquire.href, '_blank', 'noopener');
-      }
-    }
   });
 
   // Fade-in-up on scroll (respects prefers-reduced-motion)
