@@ -6,6 +6,7 @@ const SITE_URL = 'https://tonisjeans.essenceautomations.com';
 
 let bags = [];
 let settings = {};
+let accountSuspended = false;
 let editingId = null;
 let stagedImage = null;
 let stagedExtras = [];
@@ -67,6 +68,21 @@ async function loadData() {
   const json = await res.json();
   bags = json.bags || [];
   settings = json.settings || {};
+  accountSuspended = !!json.suspended;
+}
+
+// Billing kill-switch: show the owner an overdue banner when the store is
+// suspended. The owner cannot clear this — only the master token can.
+function renderSuspendedBanner() {
+  let b = document.getElementById('suspendedBanner');
+  if (!accountSuspended) { if (b) b.remove(); return; }
+  if (!b) {
+    b = document.createElement('div');
+    b.id = 'suspendedBanner';
+    b.style.cssText = 'position:sticky;top:0;z-index:9000;background:#b00020;color:#fff;padding:12px 16px;text-align:center;font-size:14px;font-weight:600;line-height:1.4;';
+    document.body.prepend(b);
+  }
+  b.innerHTML = 'Your store is currently offline because payment is overdue. Please contact Essence Automations to restore it. <a href="https://wa.me/254720615606" style="color:#fff;text-decoration:underline;">Message us</a>';
 }
 
 // ====== HELPERS ======
@@ -1398,6 +1414,7 @@ async function commitIgSync() {
 async function init() {
   showToast('Loading…');
   await loadData();
+  renderSuspendedBanner();
   renderList();
   renderTrash();
   renderDashboard();

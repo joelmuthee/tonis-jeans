@@ -37,6 +37,14 @@ const isAuthed = (req, env) => {
   return env.ADMIN_TOKEN && auth.slice(7).trim() === env.ADMIN_TOKEN;
 };
 
+// Master token = billing/agency only. Controls the suspend flag. The shop's
+// ADMIN_TOKEN can NOT flip suspend, so the owner can't reactivate themselves.
+const isMaster = (req, env) => {
+  const auth = req.headers.get("Authorization") || "";
+  if (!auth.startsWith("Bearer ")) return false;
+  return env.MASTER_TOKEN && auth.slice(7).trim() === env.MASTER_TOKEN.trim();
+};
+
 // Decode HTML entities IG slathers across og:description and the embed Caption
 // div. Named entities + decimal (&#064;) + hex (&#x40;). Without this, captions
 // contain literal "&#064;" instead of "@", which breaks admin's @<price> parser.
@@ -469,7 +477,20 @@ export default {
     if (request.method === "GET" && path === "/api/bags") {
       const raw = await env.BAGS.get("data");
       const data = raw ? JSON.parse(raw) : { bags: [], settings: {} };
+      // Billing kill-switch: stored in its own KV key so the owner's admin
+      // publishes (which only write "data") can never clear it.
+      data.suspended = (await env.BAGS.get("suspended")) === "1";
       return json(data, 200, { "Cache-Control": "public, max-age=10" });
+    }
+
+    // Billing only: flip the suspend flag. Authed by MASTER_TOKEN (not the shop admin token).
+    if (request.method === "POST" && path === "/api/suspend") {
+      if (!isMaster(request, env)) return json({ error: "unauthorized" }, 401);
+      let body;
+      try { body = await request.json(); } catch { return json({ error: "invalid json" }, 400); }
+      const suspended = !!body.suspended;
+      await env.BAGS.put("suspended", suspended ? "1" : "0");
+      return json({ ok: true, suspended });
     }
 
     const imgMatch = path.match(/^\/img\/(.+)$/);
