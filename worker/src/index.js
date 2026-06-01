@@ -497,6 +497,7 @@ export default {
           return nb;
         });
       }
+      if (!admin && data.clients) delete data.clients;
       return json(data, 200, admin ? { "Cache-Control": "no-store" } : { "Cache-Control": "public, max-age=10" });
     }
 
@@ -645,7 +646,9 @@ export default {
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, 400); }
       if (!Array.isArray(body.bags)) return json({ error: "bags must be array" }, 400);
-      await env.BAGS.put("data", JSON.stringify({ bags: body.bags, settings: body.settings || {} }));
+      const payload = { bags: body.bags, settings: body.settings || {} };
+      if (Array.isArray(body.clients)) payload.clients = body.clients;
+      await env.BAGS.put("data", JSON.stringify(payload));
       return json({ ok: true, count: body.bags.length });
     }
 
