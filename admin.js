@@ -1082,7 +1082,6 @@ function renderInventory() {
     { label: 'Total items', val: totalItems, sub: 'pieces listed', cls: '' },
     { label: 'Available', val: totalUnits.toLocaleString(), sub: 'still in stock', cls: 'success' },
     { label: 'Catalog value', val: fmtKsh(totalValue), sub: 'at listed prices', cls: '' },
-    { label: 'Almost gone', val: lowStock, sub: 'few units left', cls: lowStock > 0 ? 'warn' : '' },
     { label: 'Sold', val: outOfStock, sub: 'no units remaining', cls: outOfStock > 0 ? 'danger' : '' },
   ].map(k => `
     <div class="inv-kpi ${k.cls}">
