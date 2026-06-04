@@ -480,9 +480,9 @@ function generateDescription(name, cat) {
     `One of one. Once it's gone, it's gone.`,
   ];
   const closes = [
-    `Tap Enquire to chat with Toni on WhatsApp.`,
+    `Tap Check availability to chat with Toni on WhatsApp.`,
     `Pick up at Shop T03, Mithoo Business Centre, Moi Avenue, or arrange delivery.`,
-    `Available sizes listed. Tap Enquire to confirm and pay.`,
+    `Available sizes listed. Tap Check availability to confirm and pay.`,
   ];
   return [openers[Math.floor(Math.random() * openers.length)], mids[Math.floor(Math.random() * mids.length)], closes[Math.floor(Math.random() * closes.length)]].join(' ');
 }
@@ -1717,7 +1717,7 @@ function buildBroadcastMessage(recipientName) {
     ? '\n\n' + items.map((b, i) => `${i + 1}. *${b.name}*${b.price > 0 ? ' - ' + fmtKsh(b.price) : ''}`).join('\n')
     : '';
   const greet = recipientName ? `Hi ${recipientName.split(' ')[0]}! ` : 'Hi! ';
-  return `${greet}It's Toni's Jeans & Tees. ${subject || 'Fresh stock just landed.'}${itemsBlock}\n\nTap to browse: ${SITE_URL}\n\nReply here to enquire.`;
+  return `${greet}It's Toni's Jeans & Tees. ${subject || 'Fresh stock just landed.'}${itemsBlock}\n\nTap to browse: ${SITE_URL}\n\nReply here to chat.`;
 }
 
 function renderBroadcastPreview() {

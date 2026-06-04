@@ -542,7 +542,7 @@ export default {
       const mime = /\.png$/i.test(img) ? "image/png" : /\.webp$/i.test(img) ? "image/webp" : "image/jpeg";
       const price = item.price > 0 ? ` · Ksh ${Number(item.price).toLocaleString("en-US")}` : "";
       const title = esc(item.name + price);
-      const desc = esc((item.description || "Affordable denim & tees in Nairobi. Tap to view and enquire on WhatsApp.").slice(0, 160));
+      const desc = esc((item.description || "Affordable denim & tees in Nairobi. Tap to view and check availability on WhatsApp.").slice(0, 160));
       const html = `<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <meta property="og:type" content="product">
@@ -646,6 +646,12 @@ export default {
       let body;
       try { body = await request.json(); } catch { return json({ error: "invalid json" }, 400); }
       if (!Array.isArray(body.bags)) return json({ error: "bags must be array" }, 400);
+      // Empty-publish guard (mandated by CATALOG-STANDARDS): reject {bags:[]}
+      // unless the caller passes force:true. Without this, a stray empty
+      // payload silently nuked the live catalog (learned the hard way on Nzuri).
+      if (body.bags.length === 0 && body.force !== true) {
+        return json({ error: "empty publish blocked; pass force:true to confirm wipe" }, 400);
+      }
       const payload = { bags: body.bags, settings: body.settings || {} };
       if (Array.isArray(body.clients)) payload.clients = body.clients;
       await env.BAGS.put("data", JSON.stringify(payload));

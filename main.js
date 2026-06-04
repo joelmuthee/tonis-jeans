@@ -126,7 +126,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
       ? ` (size ${selectedSize})`
       : (avail.length ? ` (sizes: ${avail.join(', ')})` : '');
     const pricePart = (item.price > 0) ? ` (${fmtPrice(item.price)})` : '';
-    return `Hi Toni! I'd like to enquire about the *${item.name}*${sizePart}${pricePart} from your catalog.`;
+    return `Hi Toni! I'd like to check availability of the *${item.name}*${sizePart}${pricePart} from your catalog.`;
   }
   function whatsappLink(item, selectedSize) {
     const phone = (settings.whatsappNumber || '254721623937');
@@ -146,7 +146,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
       const pricePart = it.price > 0 ? ` (${fmtPrice(it.price)})` : '';
       return `${i + 1}. *${it.name}*${pricePart}`;
     }).join('\n');
-    const msg = `Hi Toni! I'd like to enquire about these items from my wishlist:\n\n${lines}`;
+    const msg = `Hi Toni! I'd like to check availability of these items from my wishlist:\n\n${lines}`;
     return `https://wa.me/${phone}?text=${encodeURIComponent(msg)}`;
   }
   function priceHtml(item) {
@@ -333,7 +333,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
           </div>
           <div class="card-actions">
             <a class="btn-card primary" href="${whatsappLink(item)}" target="_blank" rel="noopener" ${soldOut ? 'aria-disabled="true"' : ''}>
-              ${WA_SVG} ${soldOut ? 'Sold out' : 'Enquire'}
+              ${WA_SVG} ${soldOut ? 'Sold out' : 'Check availability'}
             </a>
           </div>
         </div>
