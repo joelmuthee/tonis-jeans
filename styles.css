@@ -524,6 +524,9 @@ html { scrollbar-color: var(--gold) var(--bg); scrollbar-width: thin; }
 ::-webkit-scrollbar-corner { background: var(--bg); }
 .shop-map { margin-top: 14px; }
 .shop-map iframe { box-shadow: var(--shadow); }
+/* Wide map — full container width below the About/How-to-buy grid. */
+.map-wrap { margin-top: 44px; }
+.map-wrap iframe { display: block; width: 100%; border-radius: 14px; box-shadow: var(--shadow); }
 .map-link { display: inline-block; margin-top: 10px; font-size: 13px; font-weight: 600; color: var(--gold-deep); }
 .map-link:hover { color: var(--ink); }
 .footer-shop { font-size: 13px; color: var(--ink-soft); }
