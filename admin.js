@@ -330,6 +330,7 @@ function blobToStagedJpeg(blob, maxDim = 1280, quality = 0.82) {
 
 const imageInput = document.getElementById('imageInput');
 const imagePreview = document.getElementById('imagePreview');
+const costInput = document.getElementById('costInput');
 imageInput.addEventListener('change', async e => {
   const file = e.target.files[0];
   if (!file) return;
@@ -511,6 +512,10 @@ async function saveItem() {
   if (!name) { showToast('Item name is required.'); return; }
   if (!price || price < 0) { showToast('Enter a valid price.'); return; }
 
+  // Buying price (cost) — admin-only, optional, never rejected. Blank/0 = not recorded.
+  const costRaw = costInput.value.trim();
+  const cost = costRaw === '' ? 0 : Math.max(0, parseInt(costRaw, 10) || 0);
+
   setSaving(true);
   try {
     let imagePath = null;
@@ -549,6 +554,7 @@ async function saveItem() {
         if (bag.images.length) bag.images = bag.images.filter((u, i, a) => u && a.indexOf(u) === i);
         clearedSizes.forEach(sz => { delete bag.stock[sz]; });
         if (imagePath) bag.image = imagePath;
+        if (cost) bag.cost = cost; else delete bag.cost;
       });
       showToast('Item updated and live.');
     } else {
@@ -557,6 +563,7 @@ async function saveItem() {
       const newBag = { id, name, category, description: desc, price, stock, sales: [], image: imagePath, createdAt: new Date().toISOString() };
       if (extraUrls.length) newBag.images = [imagePath, ...extraUrls];
       if (reel) newBag.reel = reel;
+      if (cost) newBag.cost = cost;
       await apiMutateAndPublish(() => { bags.unshift(newBag); });
       showToast('Item added and live.');
     }
@@ -658,6 +665,7 @@ function resetForm() {
   setCategoryValue('');
   document.getElementById('descInput').value = '';
   document.getElementById('priceInput').value = '';
+  costInput.value = '';
   const reelEl = document.getElementById('reelInput');
   if (reelEl) reelEl.value = '';
   clearStockForm();
@@ -689,6 +697,7 @@ function editItem(id) {
   setCategoryValue(bag.category || '');
   document.getElementById('descInput').value = bag.description || '';
   document.getElementById('priceInput').value = bag.price;
+  costInput.value = bag.cost || '';
   const reelEl = document.getElementById('reelInput');
   if (reelEl) reelEl.value = bag.reel || '';
   setStockToForm(bag.stock || {});
@@ -1020,12 +1029,36 @@ function _renderDashboardInner() {
     return { ...b, count, revenue };
   });
 
-  document.getElementById('kpiGrid').innerHTML = buckets.map(b => `
+  // All-time profit (admin-only) — sums realised − cost×unitsSold over ONLY the
+  // sold items that have a buying price recorded. costKnown = how many sold items
+  // carry a cost; soldItemsCount = all items with at least one sale (coverage note,
+  // so a partial figure isn't mistaken for total profit).
+  let profitAll = 0, costKnown = 0, soldItemsCount = 0;
+  bags.forEach(bag => {
+    const sold = totalUnitsSold(bag);
+    if (sold <= 0) return;
+    soldItemsCount++;
+    if (bag.cost) {
+      profitAll += totalRevenue(bag) - bag.cost * sold;
+      costKnown++;
+    }
+  });
+
+  document.getElementById('kpiGrid').innerHTML = buckets.map(b => {
+    let profitSub = '';
+    if (b.label === 'All time' && costKnown > 0) {
+      const note = costKnown < soldItemsCount
+        ? `<span id="statAllProfitNote" style="color:#999;font-weight:400;"> · from ${costKnown}/${soldItemsCount} with cost</span>`
+        : '';
+      profitSub = `<div id="statAllProfitSub" class="kpi-profit" style="font-size:12px;color:#2e7d32;font-weight:600;margin-top:2px;">Profit <span id="statAllProfit">${fmtKsh(profitAll)}</span>${note}</div>`;
+    }
+    return `
     <div class="kpi-card">
       <div class="kpi-label">${b.label}</div>
       <div class="kpi-count">${b.count} <span class="kpi-unit">units</span></div>
-      <div class="kpi-revenue">${fmtKsh(b.revenue)}</div>
-    </div>`).join('');
+      <div class="kpi-revenue">${fmtKsh(b.revenue)}</div>${profitSub}
+    </div>`;
+  }).join('');
 
   const splitEl = document.getElementById('posTodaySplit');
   if (splitEl) {
@@ -1157,6 +1190,18 @@ function renderInventory() {
     const statusCls = units === 0 ? 'zero' : units <= 3 ? 'low' : 'ok';
     const statusLabel = units === 0 ? 'Sold' : units <= 3 ? 'Almost gone' : 'Available';
 
+    // Admin-only cost/profit subline — shown only when a buying price is recorded.
+    let costLine = '';
+    if (bag.cost) {
+      if (soldUnits > 0) {
+        const profit = totalRevenue(bag) - bag.cost * soldUnits;
+        costLine = `<div style="font-size:11px;color:#2e7d32;">cost ${fmtKsh(bag.cost)} · profit ${fmtKsh(profit)}</div>`;
+      } else {
+        const margin = bag.price - bag.cost;
+        costLine = `<div style="font-size:11px;color:#2e7d32;">cost ${fmtKsh(bag.cost)} · margin ${fmtKsh(margin)}</div>`;
+      }
+    }
+
     return `
     <tr>
       <td><img class="item-img" src="${bag.image}" alt="${escapeHtml(bag.name)}"></td>
@@ -1165,7 +1210,7 @@ function renderInventory() {
         <div style="font-size:11px;color:#999;margin-top:2px;">${soldUnits} sold, ${fmtKsh(totalRevenue(bag))} revenue</div>
       </td>
       <td style="font-size:13px;">${escapeHtml(bag.category || '-')}</td>
-      <td style="font-size:13px;font-weight:600;">${fmtKsh(bag.price)}</td>
+      <td style="font-size:13px;font-weight:600;">${fmtKsh(bag.price)}${costLine}</td>
       <td><div class="stock-cells">${stockCells}</div></td>
       <td style="font-weight:700;font-size:14px;">${units}</td>
       <td><span class="stock-pill ${statusCls}">${statusLabel}</span></td>
