@@ -774,6 +774,13 @@ document.getElementById('saleSaveBtn').addEventListener('click', async () => {
     notes: buyerNotes.value.trim(),
     soldAt: new Date().toISOString(),
   };
+  // Owed feature: capture cash actually taken at sale time. Blank = paid in full
+  // (don't write amountPaid so historical sales stay paid-in-full).
+  const salePaidRaw = (document.getElementById('salePaidInput')?.value || '').trim();
+  if (salePaidRaw !== '') {
+    const saleTotalNow = (Number(sale.salePrice) || 0) * (Number(sale.qty) || 1);
+    sale.amountPaid = Math.min(saleTotalNow, Math.max(0, parseInt(salePaidRaw, 10) || 0));
+  }
 
   closeSaleModal();
   try {
@@ -979,6 +986,12 @@ function itemAddedAt(bag) {
 }
 
 function renderDashboard() {
+  // Refresh the Owed dashboard alongside every other render-dash trigger so
+  // KPIs + nav count stay in sync after sales / payments / undos.
+  if (typeof renderOwed === 'function') renderOwed();
+  _renderDashboardInner();
+}
+function _renderDashboardInner() {
   const now = new Date();
   const buckets = [
     { label: 'Today',      since: startOfDay(now) },
@@ -1049,7 +1062,7 @@ function renderDashboard() {
           <div class="recent-main">
             <img src="${bag.image}" alt="${escapeHtml(bag.name)}">
             <div>
-              <div class="recent-name">${escapeHtml(bag.name)} · ${escapeHtml(s.size || '')} × ${s.qty || 1}</div>
+              <div class="recent-name">${escapeHtml(bag.name)} · ${escapeHtml(s.size || '')} × ${s.qty || 1}${saleBalance(bag, s) > 0 ? ` <span class="owed-tag">owes ${fmtKsh(saleBalance(bag, s))}</span>` : ''}</div>
               <div class="recent-meta">${fmtKsh(s.salePrice || bag.price)} · ${s.buyerName ? escapeHtml(s.buyerName) : 'No buyer saved'} · ${relTime(s.soldAt)}</div>
             </div>
           </div>
@@ -1344,6 +1357,7 @@ function renderClients() {
   const listEl = document.getElementById('clientsList');
   if (!listEl) return;
   const ledger = clientsLedger();
+  const owedMap = owedByPhone();
   const totalSpend = ledger.reduce((s, c) => s + c.spend, 0);
   const repeat = ledger.filter(c => c.purchases.length >= 2).length;
   const avg = ledger.length ? Math.round(totalSpend / ledger.length) : 0;
@@ -1384,7 +1398,7 @@ function renderClients() {
       <div class="client-row">
         <div class="client-row-main">
           <div class="client-row-name">${escapeHtml(c.name || 'Unnamed buyer')}${manualTag}</div>
-          <div class="client-row-sub">${escapeHtml(c.phone)} · ${has} purchase${has === 1 ? '' : 's'} · ${fmtKsh(c.spend)} spent · ${when}</div>
+          <div class="client-row-sub">${escapeHtml(c.phone)} · ${has} purchase${has === 1 ? '' : 's'} · ${fmtKsh(c.spend)} spent · ${when}${owedMap[c.phone] > 0 ? ` · <span class="owed-amount">owes ${fmtKsh(owedMap[c.phone])}</span>` : ''}</div>
           ${noteLine}
           <div class="client-items">${items}</div>
         </div>
@@ -2147,7 +2161,14 @@ async function recordPosSale() {
       amount = isNaN(priceRaw) ? (bag.price || 0) : priceRaw;
       if (bag.stock && bag.stock[size] !== undefined) bag.stock[size] = Math.max(0, bag.stock[size] - qty);
       if (!bag.sales) bag.sales = [];
-      bag.sales.push({ size, qty, salePrice: amount, paymentMethod: posPayMethod, channel: 'shop', buyerName: name, buyerPhone: phone, notes: '', soldAt });
+      // Owed feature: capture cash now (blank = paid in full)
+      const posPaidRaw = (document.getElementById('posPaid')?.value || '').trim();
+      const saleRec = { size, qty, salePrice: amount, paymentMethod: posPayMethod, channel: 'shop', buyerName: name, buyerPhone: phone, notes: '', soldAt };
+      if (posPaidRaw !== '') {
+        const totalNow = (Number(amount) || 0) * (Number(qty) || 1);
+        saleRec.amountPaid = Math.min(totalNow, Math.max(0, parseInt(posPaidRaw, 10) || 0));
+      }
+      bag.sales.push(saleRec);
       soldName = bag.name;
       if (phone.replace(/[^0-9]/g, '').length >= 9) {
         if (!Array.isArray(clients)) clients = [];
@@ -2176,3 +2197,205 @@ document.getElementById('posNewSaleBtn')?.addEventListener('click', posReset);
 document.getElementById('posPrintReceiptBtn')?.addEventListener('click', posPrintReceipt);
 
 checkAuth();
+
+
+// ====== MONEY OWED — customer balances (buying on credit / pay later) ======
+// Each sale carries an optional amountPaid (cash taken at the moment of sale)
+// and a payments[] array (subsequent part-payments). Absent amountPaid is
+// treated as paid in full, so historical sales (pre-feature) never appear as
+// owing. Shape lifted from Nzuri Couture / Ryker Luxury (same new-stock model).
+function saleTotal(bag, s) { return (Number(s.salePrice != null ? s.salePrice : bag.price) || 0) * (Number(s.qty) || 1); }
+function salePaid(bag, s) {
+  const total = saleTotal(bag, s);
+  const initial = (s.amountPaid != null) ? Math.max(0, Number(s.amountPaid) || 0) : total;
+  const extra = (s.payments || []).reduce((sum, p) => sum + (Number(p.amount) || 0), 0);
+  return Math.min(total, initial + extra);
+}
+function saleBalance(bag, s) { return Math.max(0, saleTotal(bag, s) - salePaid(bag, s)); }
+
+function owedByPhone() {
+  const m = {};
+  for (const bag of bags) for (const s of (bag.sales || [])) {
+    const bal = saleBalance(bag, s);
+    if (bal <= 0) continue;
+    const phone = String(s.buyerPhone || '').replace(/[^0-9]/g, '');
+    if (phone.length < 9) continue;
+    m[phone] = (m[phone] || 0) + bal;
+  }
+  return m;
+}
+function owedLedger() {
+  const map = new Map();
+  for (const bag of bags) for (const s of (bag.sales || [])) {
+    const bal = saleBalance(bag, s);
+    if (bal <= 0) continue;
+    const phone = String(s.buyerPhone || '').replace(/[^0-9]/g, '');
+    const hasPhone = phone.length >= 9;
+    const key = hasPhone ? phone : ('__nophone__' + bag.id + (s.soldAt || ''));
+    let c = map.get(key);
+    if (!c) { c = { phone: hasPhone ? phone : '', name: s.buyerName || '', owed: 0, lines: [], _lastAt: 0 }; map.set(key, c); }
+    c.owed += bal;
+    c.lines.push({ bagId: bag.id, soldAt: s.soldAt, bagName: bag.name, size: s.size || '', total: saleTotal(bag, s), balance: bal, at: s.soldAt, notes: s.notes || '' });
+    const at = new Date(s.soldAt || 0).getTime();
+    if (s.buyerName && at >= c._lastAt) { c.name = s.buyerName; c._lastAt = at; }
+    else if (!c.name && s.buyerName) c.name = s.buyerName;
+  }
+  return [...map.values()];
+}
+
+// Inline date formatter so the Owed block stays self-contained.
+function _fmtOwedDate(iso) {
+  if (!iso) return '';
+  try { return new Date(iso).toLocaleDateString('en-KE', { day: 'numeric', month: 'short', year: 'numeric' }); }
+  catch (e) { return ''; }
+}
+
+let owedQuery = '';
+function renderOwed() {
+  const listEl = document.getElementById('owedList');
+  if (!listEl) return;
+  const ledger = owedLedger();
+  const totalOwed = ledger.reduce((s, c) => s + c.owed, 0);
+  const withPhone = ledger.filter(c => c.phone);
+  let oldest = null;
+  ledger.forEach(c => c.lines.forEach(l => { const t = new Date(l.at || 0).getTime(); if (t && (oldest === null || t < oldest)) oldest = t; }));
+
+  const nav = document.getElementById('navOwedCount'); if (nav) nav.textContent = ledger.length || '';
+  const navLink = document.getElementById('owedNavLink'); if (navLink) navLink.classList.toggle('admin-nav-owed-on', totalOwed > 0);
+
+  const kpi = document.getElementById('owedKpiGrid');
+  if (kpi) kpi.innerHTML = `
+    <div class="inv-kpi danger"><div class="inv-kpi-label">Total owed to you</div><div class="inv-kpi-val">${fmtKsh(totalOwed)}</div><div class="inv-kpi-sub">across ${ledger.length} customer${ledger.length === 1 ? '' : 's'}</div></div>
+    <div class="inv-kpi"><div class="inv-kpi-label">Customers owing</div><div class="inv-kpi-val">${ledger.length}</div><div class="inv-kpi-sub">${withPhone.length} with a phone saved</div></div>
+    <div class="inv-kpi"><div class="inv-kpi-label">Oldest balance</div><div class="inv-kpi-val">${oldest ? relTime(new Date(oldest).toISOString()) : '—'}</div><div class="inv-kpi-sub">${oldest ? 'taken ' + _fmtOwedDate(new Date(oldest).toISOString()) : 'since the item was taken'}</div></div>
+  `;
+
+  if (!ledger.length) {
+    listEl.innerHTML = '<p style="font-size:13px;color:#999;padding:14px;">No one owes you right now. When you record a sale and the customer pays less than the price, the balance shows up here so you can chase it.</p>';
+    return;
+  }
+  const q = owedQuery.toLowerCase();
+  const rows = ledger
+    .filter(c => !q || (c.name || '').toLowerCase().includes(q) || c.phone.includes(q))
+    .sort((a, b) => b.owed - a.owed);
+  if (!rows.length) { listEl.innerHTML = '<p style="font-size:13px;color:#999;padding:14px;">No customers match your search.</p>'; return; }
+  listEl.innerHTML = rows.map(c => {
+    const items = c.lines.slice().sort((a, b) => new Date(b.at || 0) - new Date(a.at || 0))
+      .map(l => `<span class="owed-line">${escapeHtml(l.bagName)}${l.size ? ' · ' + escapeHtml(l.size) : ''} · owes ${fmtKsh(l.balance)} of ${fmtKsh(l.total)} · taken ${_fmtOwedDate(l.at)} (${relTime(l.at)})${l.notes ? ` · <em>${escapeHtml(l.notes)}</em>` : ''}</span>`).join('');
+    const noPhone = !c.phone;
+    const title = noPhone ? 'Buyer not saved' : (c.name || 'Unnamed customer');
+    const sub = noPhone
+      ? `${c.lines.length} item${c.lines.length === 1 ? '' : 's'} on credit · no phone saved`
+      : `${escapeHtml(c.phone)} · ${c.lines.length} item${c.lines.length === 1 ? '' : 's'} on credit`;
+    const noteLine = noPhone ? '<div class="client-note">Add this customer\'s phone (Edit the sale in Recent sales) so you can track and collect it.</div>' : '';
+    const actions = noPhone ? '' : `
+          <button class="btn-admin gold" onclick="openPayDebt('${c.phone}')">Record payment</button>
+          <button class="btn-admin" onclick="remindDebt('${c.phone}')">Remind</button>`;
+    return `
+      <div class="client-row owed-row">
+        <div class="client-row-main">
+          <div class="client-row-name">${escapeHtml(title)} <span class="owed-amount">owes ${fmtKsh(c.owed)}</span></div>
+          <div class="client-row-sub">${sub}</div>
+          ${noteLine}
+          <div class="owed-lines">${items}</div>
+          <div class="owed-total">Total owing: <span class="owed-amount">${fmtKsh(c.owed)}</span></div>
+        </div>
+        <div class="client-row-actions">${actions}</div>
+      </div>`;
+  }).join('');
+}
+document.getElementById('owedSearch')?.addEventListener('input', e => { owedQuery = e.target.value.trim(); renderOwed(); });
+
+let payingPhone = '';
+function openPayDebt(phone) {
+  const c = owedLedger().find(x => x.phone === phone);
+  if (!c) return;
+  payingPhone = phone;
+  document.getElementById('payDebtName').textContent = c.name || c.phone;
+  document.getElementById('payDebtOwed').textContent = fmtKsh(c.owed);
+  document.getElementById('payDebtAmount').value = c.owed;
+  document.querySelectorAll('#payDebtPay .pos-pay-btn').forEach(b => b.classList.toggle('active', b.dataset.pay === 'cash'));
+  document.getElementById('payDebtModal').style.display = 'flex';
+  document.getElementById('payDebtAmount').focus();
+}
+window.openPayDebt = openPayDebt;
+function closePayDebt() { document.getElementById('payDebtModal').style.display = 'none'; payingPhone = ''; }
+document.getElementById('payDebtCancelBtn')?.addEventListener('click', closePayDebt);
+document.getElementById('payDebtModal')?.addEventListener('click', e => { if (e.target.id === 'payDebtModal') closePayDebt(); });
+document.getElementById('payDebtPay')?.addEventListener('click', e => {
+  const b = e.target.closest('.pos-pay-btn'); if (!b) return;
+  document.querySelectorAll('#payDebtPay .pos-pay-btn').forEach(x => x.classList.toggle('active', x === b));
+});
+document.getElementById('payDebtSaveBtn')?.addEventListener('click', async () => {
+  const phone = payingPhone;
+  const amount = parseInt(document.getElementById('payDebtAmount').value, 10);
+  const method = document.querySelector('#payDebtPay .pos-pay-btn.active')?.dataset.pay || 'cash';
+  if (!phone) return;
+  if (isNaN(amount) || amount <= 0) { showToast('Enter how much they paid.'); return; }
+  closePayDebt();
+  const at = new Date().toISOString();
+  try {
+    let applied = 0;
+    await apiMutateAndPublish(() => {
+      const lines = [];
+      for (const bag of bags) for (const s of (bag.sales || [])) {
+        if (String(s.buyerPhone || '').replace(/[^0-9]/g, '') !== phone) continue;
+        if (saleBalance(bag, s) > 0) lines.push({ bag, s });
+      }
+      lines.sort((a, b) => new Date(a.s.soldAt || 0) - new Date(b.s.soldAt || 0));
+      let remaining = amount;
+      for (const { bag, s } of lines) {
+        if (remaining <= 0) break;
+        const pay = Math.min(saleBalance(bag, s), remaining);
+        if (pay <= 0) continue;
+        if (!s.payments) s.payments = [];
+        s.payments.push({ amount: pay, at, method });
+        remaining -= pay; applied += pay;
+      }
+    });
+    renderOwed(); renderClients(); _renderDashboardInner();
+    showToast(applied > 0 ? `Payment of ${fmtKsh(applied)} recorded.` : 'That balance is already cleared.');
+  } catch (e) { showToast('Error: ' + e.message); }
+});
+
+window.remindDebt = phone => {
+  const c = owedLedger().find(x => x.phone === phone);
+  if (!c) return;
+  const first = (c.name || 'there').split(' ')[0];
+  const n = c.lines.length;
+  const list = c.lines.map((l, i) => `${i + 1}. *${l.bagName}*${l.size ? ' (' + l.size + ')' : ''}\n    Taken ${_fmtOwedDate(l.at)} · balance ${fmtKsh(l.balance)}`).join('\n');
+  const intro = n === 1
+    ? `A friendly reminder about your balance on the piece you took from Toni’s Jeans:`
+    : `A friendly reminder about the ${n} pieces you took from Toni’s Jeans that still have a balance:`;
+  const msg = `Hi ${first}, hope you’re doing well.\n\n${intro}\n\n${list}\n\n*Total still owing: ${fmtKsh(c.owed)}*\nYou can pay via M-Pesa whenever you’re ready. Thank you!`;
+  window.open(`https://wa.me/${clientWaPhone(phone)}?text=${encodeURIComponent(msg)}`, '_blank');
+};
+
+// Live "Balance owing: Ksh X" hint under the Amount paid input
+function paidHint(priceEl, qtyEl, paidEl, hintEl) {
+  if (!hintEl) return;
+  const total = (parseInt(priceEl?.value, 10) || 0) * (parseInt(qtyEl?.value, 10) || 1);
+  const raw = (paidEl?.value || '').trim();
+  if (raw === '') { hintEl.style.display = 'none'; return; }
+  const bal = total - Math.min(total, Math.max(0, parseInt(raw, 10) || 0));
+  hintEl.style.display = bal > 0 ? '' : 'none';
+  if (bal > 0) hintEl.textContent = `Balance owing: ${fmtKsh(bal)}`;
+}
+function syncPaid(priceId, qtyId, paidId, hintId, btnId) {
+  const paidEl = document.getElementById(paidId);
+  paidHint(document.getElementById(priceId), document.getElementById(qtyId), paidEl, document.getElementById(hintId));
+  const btn = document.getElementById(btnId);
+  if (btn && paidEl) btn.classList.toggle('active', (paidEl.value || '').trim() === '0');
+}
+['salePaidInput', 'salePriceInput', 'saleQtyInput'].forEach(id => document.getElementById(id)?.addEventListener('input',
+  () => syncPaid('salePriceInput', 'saleQtyInput', 'salePaidInput', 'salePaidHint', 'salePaidNone')));
+['posPaid', 'posPrice', 'posQty'].forEach(id => document.getElementById(id)?.addEventListener('input',
+  () => syncPaid('posPrice', 'posQty', 'posPaid', 'posPaidHint', 'posPaidNone')));
+document.getElementById('salePaidNone')?.addEventListener('click', () => {
+  document.getElementById('salePaidInput').value = '0';
+  syncPaid('salePriceInput', 'saleQtyInput', 'salePaidInput', 'salePaidHint', 'salePaidNone');
+});
+document.getElementById('posPaidNone')?.addEventListener('click', () => {
+  document.getElementById('posPaid').value = '0';
+  syncPaid('posPrice', 'posQty', 'posPaid', 'posPaidHint', 'posPaidNone');
+});
