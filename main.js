@@ -388,7 +388,7 @@ const API_BASE = 'https://tonisjeansandtees-api.stawisystems.workers.dev';
           ${newBadge}
           ${soldOut ? '<span class="badge-sold">Sold out</span>' : ''}
           ${catBadge}
-          <button class="heart-btn ${heartOn ? 'on' : ''}" data-action="wishlist" data-id="${item.id}" aria-pressed="${heartOn}" aria-label="${heartOn ? 'Remove from wishlist' : 'Save to wishlist'}">
+          <button class="heart-btn ${heartOn ? 'on' : ''}" data-action="wishlist" data-id="${item.id}" aria-pressed="${heartOn}" aria-label="${heartOn ? 'Remove from your list' : 'Save to your list'}">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20.84 4.61a5.5 5.5 0 0 0-7.78 0L12 5.67l-1.06-1.06a5.5 5.5 0 0 0-7.78 7.78l1.06 1.06L12 21.23l7.78-7.78 1.06-1.06a5.5 5.5 0 0 0 0-7.78z"></path></svg>
             <span class="heart-count">${itemLikeCount(item.id)}</span>
           </button>
